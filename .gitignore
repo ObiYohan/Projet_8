@@ -15,3 +15,8 @@ wheels/
 # ML flow
 mlartifacts/*
 mlflow.db
+*.db
+shap_feature_importance.csv
+
+# Data
+data
