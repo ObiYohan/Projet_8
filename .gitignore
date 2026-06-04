@@ -20,3 +20,5 @@ shap_feature_importance.csv
 
 # Data
 data
+
+logs/

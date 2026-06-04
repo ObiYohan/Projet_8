@@ -20,8 +20,8 @@ import mlflow_call
 import model_functions as mf
 
 
-# Définir les chemins de manière robuste
-PROJECT_ROOT = Path(os.getcwd()).parent if Path(os.getcwd()).name == "src" else Path(os.getcwd())
+# Définir les chemins
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 DATA_DIR = PROJECT_ROOT / "data"
 
 # Charger les données
@@ -196,6 +196,8 @@ print(shap_importance.head(15))
 # Log SHAP importance as artifact
 shap_importance.to_csv("shap_feature_importance.csv", index=False)
 mlflow.log_artifact("shap_feature_importance.csv")
+# Delete local csv
+os.remove("shap_feature_importance.csv")
 
 # Log dans MLflow
 mlflow_call.call_mlflow_start_run(
