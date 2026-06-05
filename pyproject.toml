@@ -14,4 +14,10 @@ dependencies = [
     "numpy>=2.4.4",
     "xgboost>=3.2.0",
     "gradio>=6.16.0",
+    "pytest>=9.0.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.1.0",
 ]

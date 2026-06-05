@@ -22,3 +22,7 @@ shap_feature_importance.csv
 data
 
 logs/
+.coverage
+
+#Dev
+start.sh

@@ -1,7 +1,5 @@
 import gradio as gr
 import requests
-import time
-import threading
 
 # Configuration de l'URL de l'API
 API_URL = "http://localhost:8000"
