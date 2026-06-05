@@ -31,9 +31,14 @@ RUN if [ "$DOWNLOAD_DATA" = "true" ]; then \
             echo "⚠️ HF_TOKEN is empty, skipping download"; \
         else \
             . /opt/venv/bin/activate && \
-            HF_TOKEN="$HF_TOKEN" python -c "from huggingface_hub import hf_hub_download; import os; \
+            export HF_TOKEN="$HF_TOKEN" && \
+            python -c "from huggingface_hub import hf_hub_download; import os; \
 files = ['application_train_processed.csv', 'application_test_processed.csv']; \
-[hf_hub_download(repo_id='0biyohan/Projet_8', filename=f'data/{file}', repo_type='space', local_dir='/app', token=os.environ.get('HF_TOKEN')) or print(f'✅ Downloaded {file}') for file in files]"; \
+token = os.environ.get('HF_TOKEN'); \
+print(f'Token present: {bool(token)}'); \
+[hf_hub_download(repo_id='0biyohan/Projet_8', filename=f'data/{file}', repo_type='space', local_dir='/app', token=token) and print(f'✅ Downloaded {file}') for file in files]" && \
+            echo "📂 Files in /app/data:" && \
+            ls -lh /app/data/ || echo "⚠️ Data directory is empty"; \
         fi; \
     else \
         echo "⏭️ Skipping data download (local mode)"; \

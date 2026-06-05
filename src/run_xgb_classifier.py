@@ -1,23 +1,21 @@
-
-import pandas as pd
-from mlflow_config import setup_mlflow
-from sklearn.impute import SimpleImputer
-from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-import numpy as np
-from pathlib import Path
-import matplotlib.pyplot as plt
-import os
 import mlflow
+import pandas as pd
+from sklearn.model_selection import train_test_split
+import model_functions as mf
+from sklearn.impute import SimpleImputer
+from xgboost import XGBClassifier
+from sklearn.preprocessing import MinMaxScaler
+from mlflow_config import setup_mlflow
+import mlflow_call
 import shap
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+from sklearn.model_selection import StratifiedKFold
+from pathlib import Path
 
 # Configuration MLflow
 setup_mlflow()
-
-import mlflow_call
-import model_functions as mf
 
 # Définir les chemins
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
@@ -26,36 +24,25 @@ DATA_DIR = PROJECT_ROOT / "data"
 # Charger les données avec fallback automatique
 def load_data(filename):
     """
-    Load data with automatic fallback:
-    1. Try local file first (for development)
-    2. Fall back to HF Dataset (for production/HF Spaces)
+    Load data from local directory
     """
-    local_path = DATA_DIR / filename
+    file_path = DATA_DIR / filename
     
-    # Try local first
-    if local_path.exists():
-        print(f"✅ Loading from local: {local_path}")
-        return pd.read_csv(local_path)
-    
-    # Fallback to HF Dataset
-    try:
-        from huggingface_hub import hf_hub_download
-        print(f"⬇️ Downloading from HF Dataset: {filename}")
-        remote_path = hf_hub_download(
-            repo_id="0biyohan/Projet_8-data",
-            filename=filename,
-            repo_type="dataset"
-        )
-        return pd.read_csv(remote_path)
-    except Exception as e:
+    if not file_path.exists():
         raise FileNotFoundError(
-            f"❌ Could not load {filename} from local or HF Dataset: {e}"
+            f"❌ Data file not found: {file_path}\n"
+            f"Make sure the data files are present in {DATA_DIR}"
         )
+    
+    print(f"✅ Loading data from: {file_path}")
+    return pd.read_csv(file_path)
 
 # Charger les données
-app_train = load_data('application_train_processed.csv')
-# app_test = load_data('application_test_processed.csv')
+print(f"📂 Data directory: {DATA_DIR}")
+print(f"📂 Files in data directory: {list(DATA_DIR.glob('*.csv')) if DATA_DIR.exists() else 'Directory not found'}")
 
+app_train = load_data('application_train_processed.csv')
+print(f"✅ Loaded training data: {app_train.shape}")
 
 # add features engeneering
 
