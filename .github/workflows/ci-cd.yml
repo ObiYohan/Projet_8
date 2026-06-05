@@ -78,7 +78,6 @@ jobs:
             cp Dockerfile deploy/
             cp pyproject.toml deploy/
             cp api/api.py deploy/api
-            cp data/application_train_processed.csv deploy/data
             cp gradio_app/app.py deploy/gradio_app
             cp src/* deploy/src
 

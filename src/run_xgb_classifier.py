@@ -19,14 +19,42 @@ setup_mlflow()
 import mlflow_call
 import model_functions as mf
 
-
 # Définir les chemins
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 DATA_DIR = PROJECT_ROOT / "data"
 
+# Charger les données avec fallback automatique
+def load_data(filename):
+    """
+    Load data with automatic fallback:
+    1. Try local file first (for development)
+    2. Fall back to HF Dataset (for production/HF Spaces)
+    """
+    local_path = DATA_DIR / filename
+    
+    # Try local first
+    if local_path.exists():
+        print(f"✅ Loading from local: {local_path}")
+        return pd.read_csv(local_path)
+    
+    # Fallback to HF Dataset
+    try:
+        from huggingface_hub import hf_hub_download
+        print(f"⬇️ Downloading from HF Dataset: {filename}")
+        remote_path = hf_hub_download(
+            repo_id="0biyohan/Projet_8-data",
+            filename=filename,
+            repo_type="dataset"
+        )
+        return pd.read_csv(remote_path)
+    except Exception as e:
+        raise FileNotFoundError(
+            f"❌ Could not load {filename} from local or HF Dataset: {e}"
+        )
+
 # Charger les données
-app_train = pd.read_csv(DATA_DIR / 'application_train_processed.csv')
-# app_test = pd.read_csv(DATA_DIR / 'application_test_processed.csv')
+app_train = load_data('application_train_processed.csv')
+# app_test = load_data('application_test_processed.csv')
 
 
 # add features engeneering
