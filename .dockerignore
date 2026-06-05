@@ -1,0 +1,47 @@
+# Notebooks
+*.ipynb
+**/*.ipynb
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Data files (if large)
+data/init/
+*.csv
+
+# Logs
+logs/
+*.log
+
+# MLflow artifacts (if not needed in container)
+mlruns/
+mlartifacts/
+
+# Tests
+tests/
+**/*_test.py
+
+# Exclude raw data
+data/init/
+data/init/**
