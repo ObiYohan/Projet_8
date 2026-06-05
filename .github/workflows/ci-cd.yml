@@ -86,8 +86,9 @@ jobs:
           python << 'EOF'
           from huggingface_hub import HfApi
           import time
+          import os
 
-          api = HfApi()
+          api = HfApi(token=os.environ["HF_TOKEN"])
 
           max_retries = 3
           for attempt in range(max_retries):
@@ -103,17 +104,15 @@ jobs:
                           "*.pyc",
                           "tests/**",
                       ],
-                      multi_commits=True,
-                      multi_commits_verbose=True,
                   )
                   print("✅ Upload successful!")
                   break
               except Exception as e:
-                  if attempt < max_retries - 1:
-                      wait_time = (attempt + 1) * 30
-                      print(f"⚠️ Retry {attempt + 1}/{max_retries} in {wait_time}s...")
+                  if "429" in str(e) and attempt < max_retries - 1:
+                      wait_time = (attempt + 1) * 60  # 60s, 120s, 180s
+                      print(f"⚠️ Rate limited. Retry {attempt + 1}/{max_retries} in {wait_time}s...")
                       time.sleep(wait_time)
                   else:
-                      print(f"❌ Upload failed after {max_retries} attempts")
+                      print(f"❌ Upload failed: {e}")
                       raise e
           EOF
