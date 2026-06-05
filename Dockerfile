@@ -27,38 +27,17 @@ ARG HF_TOKEN
 
 # Download data files from Hugging Face Space storage (only in production)
 RUN if [ "$DOWNLOAD_DATA" = "true" ]; then \
-        . /opt/venv/bin/activate && \
-        python - <<'PY'
-from huggingface_hub import hf_hub_download
-import os
-
-files = [
-    'application_train_processed.csv',
-    'application_test_processed.csv',
-]
-
-for file in files:
-    try:
-        hf_hub_download(
-            repo_id='0biyohan/Projet_8',
-            filename=f'data/{file}',
-            repo_type='space',
-            local_dir='/app',
-            local_dir_use_symlinks=False,
-            token=os.environ.get('HF_TOKEN')
-        )
-        print(f'✅ Downloaded {file}')
-    except Exception as e:
-        print(f'⚠️ Skip {file}: {e}')
-
+        if [ -z "$HF_TOKEN" ]; then \
+            echo "⚠️ HF_TOKEN is empty, skipping download"; \
+        else \
+            . /opt/venv/bin/activate && \
+            HF_TOKEN="$HF_TOKEN" python -c "from huggingface_hub import hf_hub_download; import os; \
+files = ['application_train_processed.csv', 'application_test_processed.csv']; \
+[hf_hub_download(repo_id='0biyohan/Projet_8', filename=f'data/{file}', repo_type='space', local_dir='/app', token=os.environ.get('HF_TOKEN')) or print(f'✅ Downloaded {file}') for file in files]"; \
+        fi; \
     else \
         echo "⏭️ Skipping data download (local mode)"; \
     fi
-PY
-
-# Copy local data if available (for local development). Use a shell copy so build
-# won't fail if the local data/ directory is absent.
-RUN mkdir -p ./data && cp -r data/* ./data/ 2>/dev/null || true
 
 # Expose ports
 EXPOSE 8000 7860
