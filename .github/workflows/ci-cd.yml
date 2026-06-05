@@ -37,12 +37,28 @@ jobs:
       run: |
         pytest tests/ -v --cov=api --cov-report=xml --cov-report=term
     
-    - name: Upload coverage reports
+    - name: Run unit tests
+      run: |
+        uv run pytest tests/ \
+          --json-report \
+          --json-report-file=test-report.json \
+          --cov=src \
+          --cov-report=xml \
+          --cov-report=term-missing
+    
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
+      if: always()
       with:
         file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: test-report.json
 
   # Job 2: Build Docker Image
 #   build:
