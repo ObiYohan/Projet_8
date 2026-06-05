@@ -67,9 +67,5 @@ EXPOSE 8000 7860
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
-# Copy startup script
-COPY start.sh .
-RUN chmod +x start.sh
-
 # Run both services
-CMD ["./start.sh"]
+CMD uvicorn api.api:app --host 0.0.0.0 --port 8000 & python gradio_app/app.py
