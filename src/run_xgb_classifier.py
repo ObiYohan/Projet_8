@@ -21,21 +21,42 @@ setup_mlflow()
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 DATA_DIR = PROJECT_ROOT / "data"
 
-# Charger les données avec fallback automatique
 def load_data(filename):
     """
-    Load data from local directory
+    Load data from local directory, download from HF Space if not found
     """
     file_path = DATA_DIR / filename
     
-    if not file_path.exists():
-        raise FileNotFoundError(
-            f"❌ Data file not found: {file_path}\n"
-            f"Make sure the data files are present in {DATA_DIR}"
-        )
+    # Try local first
+    if file_path.exists():
+        print(f"✅ Loading from local: {file_path}")
+        return pd.read_csv(file_path)
     
-    print(f"✅ Loading data from: {file_path}")
-    return pd.read_csv(file_path)
+    # Download from HF Space
+    print(f"📥 File not found locally, downloading from HF Space...")
+    try:
+        from huggingface_hub import hf_hub_download
+        
+        hf_token = os.environ.get('HF_TOKEN')
+        if not hf_token:
+            raise ValueError("HF_TOKEN environment variable not set")
+        
+        downloaded_path = hf_hub_download(
+            repo_id="0biyohan/Projet_8",
+            filename=f"data/{filename}",
+            repo_type="space",
+            local_dir=str(PROJECT_ROOT),
+            token=hf_token
+        )
+        print(f"✅ Downloaded to: {downloaded_path}")
+        return pd.read_csv(downloaded_path)
+        
+    except Exception as e:
+        raise FileNotFoundError(
+            f"❌ Could not load {filename} from local or HF Space: {e}\n"
+            f"Local path checked: {file_path}\n"
+            f"HF_TOKEN present: {bool(os.environ.get('HF_TOKEN'))}"
+        )
 
 # Charger les données
 print(f"📂 Data directory: {DATA_DIR}")

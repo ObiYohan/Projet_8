@@ -21,29 +21,6 @@ COPY gradio_app/ ./gradio_app/
 # Create data directory
 RUN mkdir -p ./data
 
-# Build argument to control data download
-ARG DOWNLOAD_DATA=true
-ARG HF_TOKEN
-
-# Download data files from Hugging Face Space storage (only in production)
-RUN if [ "$DOWNLOAD_DATA" = "true" ]; then \
-        if [ -z "$HF_TOKEN" ]; then \
-            echo "⚠️ HF_TOKEN is empty, skipping download"; \
-        else \
-            . /opt/venv/bin/activate && \
-            export HF_TOKEN="$HF_TOKEN" && \
-            python -c "from huggingface_hub import hf_hub_download; import os; \
-files = ['application_train_processed.csv', 'application_test_processed.csv']; \
-token = os.environ.get('HF_TOKEN'); \
-print(f'Token present: {bool(token)}'); \
-[hf_hub_download(repo_id='0biyohan/Projet_8', filename=f'data/{file}', repo_type='space', local_dir='/app', token=token) and print(f'✅ Downloaded {file}') for file in files]" && \
-            echo "📂 Files in /app/data:" && \
-            ls -lh /app/data/ || echo "⚠️ Data directory is empty"; \
-        fi; \
-    else \
-        echo "⏭️ Skipping data download (local mode)"; \
-    fi
-
 # Expose ports
 EXPOSE 8000 7860
 
