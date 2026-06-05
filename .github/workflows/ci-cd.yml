@@ -65,45 +65,55 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install hub
+    - name: Install huggingface_hub
       run: pip install huggingface_hub
 
     - name: Prepare deploy folder
       run: |
-            mkdir -p deploy/
             mkdir -p deploy/api
-            mkdir -p deploy/data
             mkdir -p deploy/gradio_app
             mkdir -p deploy/src
             cp Dockerfile deploy/
             cp pyproject.toml deploy/
-            cp api/api.py deploy/api
-            cp gradio_app/app.py deploy/gradio_app
-            cp src/* deploy/src
-
+            cp api/api.py deploy/api/
+            cp gradio_app/app.py deploy/gradio_app/
+            cp src/*.py deploy/src/
 
     - name: Upload to Space
       env:
-       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
           python << 'EOF'
           from huggingface_hub import HfApi
-          import os
+          import time
 
           api = HfApi()
 
-          # upload_folder avec filtres
-          api.upload_folder(
-              folder_path="deploy",
-              repo_id="0biyohan/Projet_8",
-              repo_type="space",
-              ignore_patterns=[
-                  ".git/**",
-                  ".github/**",
-                  "__pycache__/**",
-                  "*.pyc",
-                  "tests/**",
-                  "README.dev.md",
-              ],
-          )
+          max_retries = 3
+          for attempt in range(max_retries):
+              try:
+                  api.upload_folder(
+                      folder_path="deploy",
+                      repo_id="0biyohan/Projet_8",
+                      repo_type="space",
+                      ignore_patterns=[
+                          ".git/**",
+                          ".github/**",
+                          "__pycache__/**",
+                          "*.pyc",
+                          "tests/**",
+                      ],
+                      multi_commits=True,
+                      multi_commits_verbose=True,
+                  )
+                  print("✅ Upload successful!")
+                  break
+              except Exception as e:
+                  if attempt < max_retries - 1:
+                      wait_time = (attempt + 1) * 30
+                      print(f"⚠️ Retry {attempt + 1}/{max_retries} in {wait_time}s...")
+                      time.sleep(wait_time)
+                  else:
+                      print(f"❌ Upload failed after {max_retries} attempts")
+                      raise e
           EOF
