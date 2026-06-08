@@ -5,7 +5,7 @@ import model_functions as mf
 from sklearn.impute import SimpleImputer
 from xgboost import XGBClassifier
 from sklearn.preprocessing import MinMaxScaler
-from mlflow_config import setup_mlflow
+from mlflow_config import setup_mlflow, setup_dagshub_mlflow
 import mlflow_call
 import shap
 import matplotlib.pyplot as plt
@@ -14,8 +14,26 @@ import os
 from sklearn.model_selection import StratifiedKFold
 from pathlib import Path
 
+def is_running_on_huggingface():
+    """
+    Detect if the script is running on Hugging Face Spaces
+    """
+    # HF Spaces sets SPACE_ID environment variable
+    return os.environ.get('SPACE_ID') is not None or \
+           os.environ.get('SPACE_AUTHOR_NAME') is not None or \
+           os.environ.get('SYSTEM') == 'spaces'
+
+# Detect environment
+IS_HF_SPACE = is_running_on_huggingface()
+print(f"🌍 Running on: {'Hugging Face Spaces' if IS_HF_SPACE else 'Local Environment'}")
+
 # Configuration MLflow
-setup_mlflow()
+if not IS_HF_SPACE:
+    print("Setting up MLflow for local development...")
+    setup_mlflow()
+else:
+    print("Setting up MLflow for Hugging Face...")
+    setup_dagshub_mlflow()
 
 # Définir les chemins
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
@@ -33,23 +51,11 @@ def load_data(filename):
         return pd.read_csv(file_path)
     
     # Download from HF Space
-    print(f"📥 File not found locally, downloading from HF Space...")
+    print(f"📥 File not found locally, read from HF Space...")
     try:
-        from huggingface_hub import hf_hub_download
-        
-        hf_token = os.environ.get('HF_TOKEN')
-        if not hf_token:
-            raise ValueError("HF_TOKEN environment variable not set")
-        
-        downloaded_path = hf_hub_download(
-            repo_id="0biyohan/Projet_8",
-            filename=f"data/{filename}",
-            repo_type="space",
-            local_dir=str(PROJECT_ROOT),
-            token=hf_token
-        )
-        print(f"✅ Downloaded to: {downloaded_path}")
-        return pd.read_csv(downloaded_path)
+        df = pd.read_csv("hf://buckets/0biyohan/Projet_8-storage/application_train_processed.csv")
+        return df
+
         
     except Exception as e:
         raise FileNotFoundError(

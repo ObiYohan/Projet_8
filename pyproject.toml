@@ -16,6 +16,7 @@ dependencies = [
     "gradio>=6.16.0",
     "pytest>=9.0.3",
     "huggingface-hub>=1.17.0",
+    "dagshub>=0.7.0",
 ]
 
 [dependency-groups]
