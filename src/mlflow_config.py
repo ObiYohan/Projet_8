@@ -59,38 +59,63 @@ def setup_dagshub_mlflow():
         print("Falling back to local MLflow setup")
         return setup_mlflow()
     
+    print(f"✅ DAGSHUB_TOKEN found (length: {len(dagshub_token)})")
+    
     try:
-        # Initialize DagsHub with token authentication
-        dagshub.init(
-            repo_owner='obiyohan',
-            repo_name='my-ml-mlflow',
-            mlflow=True
-        )
+        print("🔄 Initializing DagsHub connection...")
         
-        # Set MLflow tracking URI manually with token
-        mlflow.set_tracking_uri('https://dagshub.com/obiyohan/my-ml-mlflow.mlflow')
+        # Set MLflow tracking URI manually with token BEFORE dagshub.init
+        tracking_uri = 'https://dagshub.com/obiyohan/my-ml-mlflow.mlflow'
+        mlflow.set_tracking_uri(tracking_uri)
+        print(f"✅ MLflow tracking URI set: {tracking_uri}")
         
         # Set credentials via environment variables
         os.environ['MLFLOW_TRACKING_USERNAME'] = 'obiyohan'
         os.environ['MLFLOW_TRACKING_PASSWORD'] = dagshub_token
+        print("✅ MLflow credentials configured")
+        
+        # Initialize DagsHub (this might still try OAuth, but we've already set up MLflow)
+        try:
+            dagshub.init(
+                repo_owner='obiyohan',
+                repo_name='my-ml-mlflow',
+                mlflow=True
+            )
+            print("✅ DagsHub initialized")
+        except Exception as dagshub_error:
+            print(f"⚠️ DagsHub init warning (continuing anyway): {dagshub_error}")
         
         experiment_name = "home_credit_default_risk"
+        print(f"🔍 Looking for experiment: {experiment_name}")
+        
         experiment = mlflow.get_experiment_by_name(experiment_name)
         
         if experiment is None:
+            print(f"📝 Creating new experiment: {experiment_name}")
             experiment_id = mlflow.create_experiment(experiment_name)
+            print(f"✅ Experiment created with ID: {experiment_id}")
         else:
             experiment_id = experiment.experiment_id
+            print(f"✅ Found existing experiment with ID: {experiment_id}")
         
         mlflow.set_experiment(experiment_name)
         
         print(f"✅ MLflow tracking URI: {mlflow.get_tracking_uri()}")
         print(f"✅ Experiment: {experiment_name} (ID: {experiment_id})")
         
+        # Test connection
+        try:
+            active_run = mlflow.active_run()
+            print(f"🔍 Active run check: {active_run}")
+        except Exception as test_error:
+            print(f"⚠️ Connection test warning: {test_error}")
+        
         return experiment_id
         
     except Exception as e:
         print(f"❌ Error setting up DagsHub MLflow: {e}")
+        import traceback
+        traceback.print_exc()
         print("Falling back to local MLflow setup")
         return setup_mlflow()
 
