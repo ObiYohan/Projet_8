@@ -29,6 +29,7 @@ def perform_cross_validation(
         return_estimator=True,
         scoring=scoring_metrics,
         groups=groups,
+        n_jobs=-1,
     )
 
     scores_dict = {}

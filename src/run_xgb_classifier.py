@@ -182,9 +182,7 @@ scores_dict_xgb, predictions_xgb = mf.evaluate_and_update_scores(
     model_name="xgboost Classifier",
     cost_fn=10,
     cost_fp=1,
-    cv_scores_dict=scores_dict,
-    n_jobs=-1,
-    verbose=2
+    cv_scores_dict=scores_dict
 )
 
 # Extract feature importances
