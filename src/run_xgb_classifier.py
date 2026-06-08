@@ -5,7 +5,7 @@ import model_functions as mf
 from sklearn.impute import SimpleImputer
 from xgboost import XGBClassifier
 from sklearn.preprocessing import MinMaxScaler
-from mlflow_config import setup_mlflow, setup_dagshub_mlflow
+from mlflow_config import setup_mlflow_auto
 import mlflow_call
 import shap
 import matplotlib.pyplot as plt
@@ -23,17 +23,8 @@ def is_running_on_huggingface():
            os.environ.get('SPACE_AUTHOR_NAME') is not None or \
            os.environ.get('SYSTEM') == 'spaces'
 
-# Detect environment
-IS_HF_SPACE = is_running_on_huggingface()
-print(f"🌍 Running on: {'Hugging Face Spaces' if IS_HF_SPACE else 'Local Environment'}")
-
-# Configuration MLflow
-if not IS_HF_SPACE:
-    print("Setting up MLflow for local development...")
-    setup_mlflow()
-else:
-    print("Setting up MLflow for Hugging Face...")
-    setup_dagshub_mlflow()
+# Configuration MLflow automatique
+setup_mlflow_auto()
 
 # Définir les chemins
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
