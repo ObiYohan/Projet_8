@@ -89,6 +89,33 @@ def check_training_status(job_id):
         return "❌ Cannot connect to API. Make sure it's running on http://localhost:8000"
     except Exception as e:
         return f"❌ Error: {str(e)}"
+    
+def make_prediction(features_json):
+    """
+    Make a prediction using the API
+    """
+    try:
+        import json
+        features = json.loads(features_json)
+        
+        response = requests.post(
+            f"{API_URL}/predict",
+            json={"features": features},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return f"""✅ Prédiction réussie:
+- Classe prédite: {result['prediction']} ({'Défaut' if result['prediction'] == 1 else 'Pas de défaut'})
+- Probabilité de défaut: {result['probability']:.4f}
+- Seuil utilisé: {result['threshold']}"""
+        else:
+            return f"❌ Erreur: {response.status_code} - {response.text}"
+            
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
 
 # Interface Gradio avec onglets
 with gr.Blocks(title="XGBoost Training API Interface") as demo:
@@ -101,7 +128,6 @@ with gr.Blocks(title="XGBoost Training API Interface") as demo:
     )
     
     with gr.Tabs():
-        # Tab 1: Health Check
         with gr.Tab("🏥 Health Check"):
             gr.Markdown("### Vérifier l'état de l'API")
             health_output = gr.Textbox(
@@ -115,7 +141,6 @@ with gr.Blocks(title="XGBoost Training API Interface") as demo:
                 outputs=health_output
             )
         
-        # Tab 2: Start Training
         with gr.Tab("🚀 Start Training"):
             gr.Markdown(
                 """
@@ -140,7 +165,6 @@ with gr.Blocks(title="XGBoost Training API Interface") as demo:
                 outputs=[train_output, job_id_output]
             )
         
-        # Tab 3: Check Status
         with gr.Tab("📊 Check Status"):
             gr.Markdown(
                 """
@@ -171,8 +195,23 @@ with gr.Blocks(title="XGBoost Training API Interface") as demo:
                 inputs=job_id_input,
                 outputs=status_output
             )
-        
-        # Tab 4: Documentation
+
+        with gr.Tab("Prédiction"):
+            gr.Markdown("### Faire une prédiction")
+            features_input = gr.Textbox(
+                label="Features (JSON format)",
+                placeholder='{"AMT_CREDIT": 100000, "AMT_INCOME_TOTAL": 50000, ...}',
+                lines=5
+            )
+            predict_btn = gr.Button("Prédire", variant="primary")
+            prediction_output = gr.Textbox(label="Résultat")
+            
+            predict_btn.click(
+                fn=make_prediction,
+                inputs=[features_input],
+                outputs=[prediction_output]
+            )
+                
         with gr.Tab("📖 Documentation"):
             gr.Markdown(
                 """
