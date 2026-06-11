@@ -128,6 +128,21 @@ with gr.Blocks(title="XGBoost Training API Interface") as demo:
     )
     
     with gr.Tabs():
+        with gr.Tab("🔮 Prédiction"):
+            gr.Markdown("### Faire une prédiction")
+            features_input = gr.Textbox(
+                label="Features (JSON format)",
+                placeholder='{"AMT_CREDIT": 100000, "AMT_INCOME_TOTAL": 50000, ...}',
+                lines=5
+            )
+            predict_btn = gr.Button("Prédire", variant="primary")
+            prediction_output = gr.Textbox(label="Résultat")
+            
+            predict_btn.click(
+                fn=make_prediction,
+                inputs=[features_input],
+                outputs=[prediction_output]
+            )
         with gr.Tab("🏥 Health Check"):
             gr.Markdown("### Vérifier l'état de l'API")
             health_output = gr.Textbox(
@@ -196,21 +211,6 @@ with gr.Blocks(title="XGBoost Training API Interface") as demo:
                 outputs=status_output
             )
 
-        with gr.Tab("Prédiction"):
-            gr.Markdown("### Faire une prédiction")
-            features_input = gr.Textbox(
-                label="Features (JSON format)",
-                placeholder='{"AMT_CREDIT": 100000, "AMT_INCOME_TOTAL": 50000, ...}',
-                lines=5
-            )
-            predict_btn = gr.Button("Prédire", variant="primary")
-            prediction_output = gr.Textbox(label="Résultat")
-            
-            predict_btn.click(
-                fn=make_prediction,
-                inputs=[features_input],
-                outputs=[prediction_output]
-            )
                 
         with gr.Tab("📖 Documentation"):
             gr.Markdown(

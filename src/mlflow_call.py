@@ -98,20 +98,19 @@ def call_mlflow_start_run(app_train,
     # Use pickle for XGBoost and LightGBM (they have their own safe serialization)
     # Use skops for pure scikit-learn models
     if 'XGB' in model_type_name or 'LGBM' in model_type_name or 'LightGBM' in model_type_name:
-        # XGBoost and LightGBM have their own safe serialization methods
         mlflow.sklearn.log_model(
             model, 
-            name=model_name,
+            artifact_path=model_name,
             serialization_format="pickle"
         )
     else:
-        # Pure scikit-learn models: use skops
         mlflow.sklearn.log_model(
             model, 
-            name=model_name,
+            artifact_path=model_name,
             serialization_format="skops",
             skops_trusted_types=["sklearn.neural_network._stochastic_optimizers.AdamOptimizer"]
         )
+    
     
     # Create and log confusion matrix
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])

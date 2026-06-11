@@ -11,6 +11,7 @@ import shap
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import joblib
 from sklearn.model_selection import StratifiedKFold
 from pathlib import Path
 
@@ -103,6 +104,17 @@ train = scaler.transform(train)
 print('Training data shape: ', train.shape)
 # print('Testing data shape: ', test.shape)
 
+# Sauvegarder les preprocessors LOCALEMENT
+PREPROCESSORS_DIR = PROJECT_ROOT / "models" / "preprocessors"
+PREPROCESSORS_DIR.mkdir(parents=True, exist_ok=True)
+
+imputer_path = PREPROCESSORS_DIR / "imputer.pkl"
+scaler_path = PREPROCESSORS_DIR / "scaler.pkl"
+features_path = PREPROCESSORS_DIR / "feature_names.pkl"
+
+joblib.dump(imputer, imputer_path)
+joblib.dump(scaler, scaler_path)
+joblib.dump(features, features_path)
 
 random_state = 42
 
@@ -232,13 +244,20 @@ mlflow.log_artifact("shap_feature_importance.csv")
 # Delete local csv
 os.remove("shap_feature_importance.csv")
 
+# ✅ Logger les preprocessors individuellement dans le dossier "preprocessors"
+mlflow.log_artifact(str(imputer_path), artifact_path="preprocessors")
+mlflow.log_artifact(str(scaler_path), artifact_path="preprocessors")
+mlflow.log_artifact(str(features_path), artifact_path="preprocessors")
+
+print("✅ Preprocessors logged to MLflow")
+
 # Log dans MLflow
 mlflow_call.call_mlflow_start_run(
     app_train,
     scores_dict_xgb, 
     xgb_model,
     predictions_xgb['confusion_matrix'],
-    model_name="xgboost_Classifier",
+    model_name="model",
     description="xgboost baseline model"
 )
 
