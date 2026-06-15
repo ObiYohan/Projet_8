@@ -25,7 +25,7 @@ def is_running_on_huggingface():
            os.environ.get('SYSTEM') == 'spaces'
 
 # Configuration MLflow automatique
-setup_mlflow_auto()
+setup_mlflow_auto("home_credit_risk_training")
 
 # Définir les chemins
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
@@ -244,10 +244,16 @@ mlflow.log_artifact("shap_feature_importance.csv")
 # Delete local csv
 os.remove("shap_feature_importance.csv")
 
-# ✅ Logger les preprocessors individuellement dans le dossier "preprocessors"
+# Log "preprocessors"
 mlflow.log_artifact(str(imputer_path), artifact_path="preprocessors")
 mlflow.log_artifact(str(scaler_path), artifact_path="preprocessors")
 mlflow.log_artifact(str(features_path), artifact_path="preprocessors")
+
+# Log reference data
+reference_data_raw = app_train.drop('TARGET', axis=1)
+reference_data_raw.to_csv("reference_data.csv", index=False)
+mlflow.log_artifact("reference_data.csv", artifact_path="data")
+os.remove("reference_data.csv")  # clean local file
 
 print("✅ Preprocessors logged to MLflow")
 

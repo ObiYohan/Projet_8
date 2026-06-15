@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+from evidently import Report
+from evidently.presets import DataDriftPreset
 import subprocess
 import sys
 from pathlib import Path
@@ -160,6 +162,19 @@ async def train_model():
     """
     Lance l'entraînement du modèle XGBoost en arrière-plan
     """
+    # Vérifier si un entraînement est déjà en cours
+    for job_id, status in training_status.items():
+        if status["status"] in ["pending", "running"]:
+            raise HTTPException(
+                status_code=409,  # Conflict
+                detail={
+                    "message": "Training already in progress",
+                    "current_job_id": job_id,
+                    "status": status["status"],
+                    "started_at": status["started_at"]
+                }
+            )
+    
     # Vérifier que le script existe
     if not SCRIPT_PATH.exists():
         raise HTTPException(
@@ -262,7 +277,7 @@ async def health_check():
         "logs_dir": str(LOGS_DIR)
     }
 
-def load_model_from_mlflow():
+def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
     """
     Charge le modèle et les preprocessors depuis MLflow
     """
@@ -271,13 +286,13 @@ def load_model_from_mlflow():
     try:
         logger.info("⏳ Loading model from MLflow...")
         
-        setup_mlflow_auto()
+        setup_mlflow_auto(experiment_name)
         
         client = mlflow.tracking.MlflowClient()
-        experiment = client.get_experiment_by_name("home_credit_default_risk")
+        experiment = client.get_experiment_by_name(experiment_name)
         
         if not experiment:
-            raise ValueError("Experiment 'home_credit_default_risk' not found")
+            raise ValueError(f"Experiment {experiment_name} not found")
         
         runs = client.search_runs(
             experiment_ids=[experiment.experiment_id],
@@ -291,9 +306,9 @@ def load_model_from_mlflow():
         run_id = runs[0].info.run_id
         logger.info(f"📦 Loading model from run: {run_id}")
         
-        # ✅ Télécharger les preprocessors
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
+                # Charger les preprocessors
                 preprocessors_dir = client.download_artifacts(
                     run_id, 
                     "preprocessors",
@@ -306,26 +321,38 @@ def load_model_from_mlflow():
                 
                 logger.info("✅ Preprocessors loaded successfully")
                 
+                # Charger les données de référence
+                data_dir = client.download_artifacts(
+                    run_id, 
+                    "data",
+                    tmpdir
+                )
+                reference_csv_path = Path(data_dir) / "reference_data.csv"
+                
+                # Lire le CSV
+                reference_data = pd.read_csv(reference_csv_path)
+                logger.info(f"✅ Reference data loaded: {reference_data.shape}")
+                
             except Exception as e:
-                logger.error(f"❌ Error loading preprocessors: {e}")
+                logger.error(f"❌ Error loading artifacts: {e}")
                 raise
         
-        # ✅ Charger le modèle
+        # Charger le modèle
         model_uri = f"runs:/{run_id}/model"
         model = mlflow.sklearn.load_model(model_uri)
         
-        # ✅ Charger le threshold
+        # Charger le threshold
         threshold_param = runs[0].data.params.get('threshold_value', '0.5')
         model_threshold = float(threshold_param)
         
         logger.info(f"✅ Model loaded successfully (threshold: {model_threshold})")
-        return True
+        return True, model_uri, reference_data
         
     except Exception as e:
         logger.error(f"❌ Error loading model: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        return False, None, None
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
@@ -334,10 +361,14 @@ async def predict(request: PredictionRequest):
     """
     global model, imputer, scaler, feature_names, model_threshold
     
+    # Variable pour stocker reference_data
+    reference_data = None
+    model_uri = None
+    
     # ✅ Charger le modèle si nécessaire
     if model is None:
         logger.info("⏳ Model not loaded, loading now...")
-        success = load_model_from_mlflow()
+        success, model_uri, reference_data = load_model_from_mlflow()
         if not success:
             raise HTTPException(
                 status_code=500,
@@ -383,6 +414,48 @@ async def predict(request: PredictionRequest):
         # Make prediction
         prediction_proba = model.predict_proba(input_array)[0, 1]
         prediction = int(prediction_proba >= model_threshold)
+
+        # Log prediction metrics to MLflow
+        setup_mlflow_auto("home_credit_risk_inference")
+        run_name = f"inference_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        mlflow.start_run(run_name=run_name)
+        logger.info(f"MLflow run started: {run_name}")
+        mlflow.set_tag("baseline_model_uri", model_uri)
+        mlflow.log_param("threshold_value", model_threshold)
+        mlflow.log_metric("prediction_probability", prediction_proba)
+        mlflow.log_metric("prediction", prediction)
+
+        # Drift detection avec Evidently (seulement si reference_data est disponible)
+        if reference_data is not None:
+            # Filter out columns that are empty in current data
+            non_empty_cols = input_df.columns[input_df.notna().any()].tolist()
+            
+            # Keep only common columns between reference and current that are non-empty
+            common_cols = [col for col in reference_data.columns if col in non_empty_cols]
+            
+            if len(common_cols) > 0:
+                drift_report = Report(metrics=[DataDriftPreset()])
+                mon_evaluation = drift_report.run(
+                    reference_data=reference_data[common_cols], 
+                    current_data=input_df[common_cols]
+                )
+                
+                # Save report as HTML
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as tmp:
+                    temp_path = tmp.name
+
+                mon_evaluation.save_html(temp_path)
+                
+                # Log drift report to MLflow
+                mlflow.log_artifact(temp_path, "drift_reports")
+                os.unlink(temp_path)  # Clean up temp file
+                
+                logger.info(f"✅ Drift report logged ({len(common_cols)} features)")
+            else:
+                logger.warning("⚠️ No common non-empty columns for drift detection")
+
+
+        mlflow.end_run()
         
         logger.info(f"✅ Prediction: {prediction} (proba: {prediction_proba:.4f}, threshold: {model_threshold})")
         
@@ -400,6 +473,7 @@ async def predict(request: PredictionRequest):
             status_code=500,
             detail=f"Prediction failed: {str(e)}"
         )
+
 
 @app.get("/model/info")
 async def get_model_info():

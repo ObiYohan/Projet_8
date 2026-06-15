@@ -14,7 +14,7 @@ def is_running_on_huggingface():
            os.environ.get('SPACE_AUTHOR_NAME') is not None or \
            os.environ.get('SYSTEM') == 'spaces'
 
-def setup_mlflow():
+def setup_mlflow(experiment_name = "home_credit_risk_training"):
     """
     Configure MLflow pour le projet avec SQLite
     """
@@ -26,7 +26,6 @@ def setup_mlflow():
     
     mlflow.set_tracking_uri(tracking_uri)
     
-    experiment_name = "home_credit_default_risk"
     experiment = mlflow.get_experiment_by_name(experiment_name)
     
     if experiment is None:
@@ -46,7 +45,7 @@ def setup_mlflow():
     
     return experiment_id
 
-def setup_dagshub_mlflow():
+def setup_dagshub_mlflow(experiment_name):
     """
     Configure MLflow pour le projet avec Dagshub
     Utilise un token pour l'authentification automatisée
@@ -85,7 +84,6 @@ def setup_dagshub_mlflow():
         except Exception as dagshub_error:
             print(f"⚠️ DagsHub init warning (continuing anyway): {dagshub_error}")
         
-        experiment_name = "home_credit_default_risk"
         print(f"🔍 Looking for experiment: {experiment_name}")
         
         experiment = mlflow.get_experiment_by_name(experiment_name)
@@ -119,7 +117,7 @@ def setup_dagshub_mlflow():
         print("Falling back to local MLflow setup")
         return setup_mlflow()
 
-def setup_mlflow_auto():
+def setup_mlflow_auto(experiment_name = "home_credit_risk_training"):
     """
     Configure MLflow automatiquement selon l'environnement
     - HF Spaces ou environnement automatisé: DagsHub avec token
@@ -130,7 +128,7 @@ def setup_mlflow_auto():
     
     if IS_HF_SPACE or HAS_DAGSHUB_TOKEN:
         print("🌍 Using DagsHub MLflow (automated environment)")
-        return setup_dagshub_mlflow()
+        return setup_dagshub_mlflow(experiment_name)
     else:
         print("💻 Using local SQLite MLflow")
-        return setup_mlflow()
+        return setup_mlflow(experiment_name)
