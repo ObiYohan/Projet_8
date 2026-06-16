@@ -493,27 +493,6 @@ async def predict(request: PredictionRequest):
         )
 
 
-@app.get("/model/info")
-async def get_model_info():
-    """
-    Get information about the loaded model
-    """
-    global model, feature_names, model_threshold
-    
-    if model is None:
-        return {
-            "status": "not_loaded",
-            "message": "No model loaded yet"
-        }
-    
-    return {
-        "status": "loaded",
-        "model_type": type(model).__name__,
-        "num_features": len(feature_names) if feature_names else 0,
-        "threshold": float(model_threshold),
-        "features_sample": feature_names[:10] if feature_names else []
-    }
-
 @app.post("/model/load")
 async def load_model():
     """
@@ -543,35 +522,6 @@ async def load_model():
             status_code=500,
             detail="Failed to load model from MLflow"
         )
-
-@app.get("/model/template")
-async def get_prediction_template():
-    """
-    Get a JSON template with all required features
-    """
-    global model, feature_names
-    
-    if model is None:
-        logger.info("⏳ Model not loaded, loading now...")
-        success = load_model_from_mlflow()
-        if not success:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to load model from MLflow"
-            )
-    
-    if feature_names is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Feature names not available"
-        )
-    
-    template = {feature: 0 for feature in feature_names}
-    
-    return {
-        "features": template,
-        "num_features": len(feature_names)
-    }
 
 if __name__ == "__main__":
     import uvicorn
