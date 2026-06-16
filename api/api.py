@@ -16,6 +16,7 @@ import os
 import mlflow
 import joblib
 import tempfile
+import json
 
 # Ajouter src/ au PYTHONPATH dès le début
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
@@ -31,12 +32,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_data = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName
+        }
+        return json.dumps(log_data)
+
 app = FastAPI(title="Home Credit Default Risk API", version="1.0.0")
 
 # Configuration des chemins
 SCRIPT_PATH = PROJECT_ROOT / "src" / "run_xgb_classifier.py"
 LOGS_DIR = PROJECT_ROOT / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
+
+# Configure JSON logging
+handler = logging.FileHandler(LOGS_DIR / "api_structured.log")
+handler.setFormatter(JSONFormatter())
+logger.addHandler(handler)
+
 
 # Stockage des statuts d'exécution
 training_status = {}
@@ -418,44 +436,44 @@ async def predict(request: PredictionRequest):
         # Log prediction metrics to MLflow
         setup_mlflow_auto("home_credit_risk_inference")
         run_name = f"inference_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        mlflow.start_run(run_name=run_name)
-        logger.info(f"MLflow run started: {run_name}")
-        mlflow.set_tag("baseline_model_uri", model_uri)
-        mlflow.log_param("threshold_value", model_threshold)
-        mlflow.log_metric("prediction_probability", prediction_proba)
-        mlflow.log_metric("prediction", prediction)
 
-        # Drift detection avec Evidently (seulement si reference_data est disponible)
-        if reference_data is not None:
-            # Filter out columns that are empty in current data
-            non_empty_cols = input_df.columns[input_df.notna().any()].tolist()
+
+        with mlflow.start_run(run_name=run_name):
+            # Link to training model
+            mlflow.set_tag("baseline_model_uri", model_uri)
             
-            # Keep only common columns between reference and current that are non-empty
-            common_cols = [col for col in reference_data.columns if col in non_empty_cols]
+            # Log only inference-specific data
+            mlflow.log_metric("prediction_probability", prediction_proba)
+            mlflow.log_metric("prediction_class", prediction)
             
-            if len(common_cols) > 0:
-                drift_report = Report(metrics=[DataDriftPreset()])
-                mon_evaluation = drift_report.run(
-                    reference_data=reference_data[common_cols], 
-                    current_data=input_df[common_cols]
-                )
+            # Drift detection avec Evidently (seulement si reference_data est disponible)
+            if reference_data is not None:
+                # Filter out columns that are empty in current data
+                non_empty_cols = input_df.columns[input_df.notna().any()].tolist()
                 
-                # Save report as HTML
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as tmp:
-                    temp_path = tmp.name
-
-                mon_evaluation.save_html(temp_path)
+                # Keep only common columns between reference and current that are non-empty
+                common_cols = [col for col in reference_data.columns if col in non_empty_cols]
                 
-                # Log drift report to MLflow
-                mlflow.log_artifact(temp_path, "drift_reports")
-                os.unlink(temp_path)  # Clean up temp file
-                
-                logger.info(f"✅ Drift report logged ({len(common_cols)} features)")
-            else:
-                logger.warning("⚠️ No common non-empty columns for drift detection")
+                if len(common_cols) > 0:
+                    drift_report = Report(metrics=[DataDriftPreset()])
+                    mon_evaluation = drift_report.run(
+                        reference_data=reference_data[common_cols], 
+                        current_data=input_df[common_cols]
+                    )
+                    
+                    # Save report as HTML
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as tmp:
+                        temp_path = tmp.name
 
-
-        mlflow.end_run()
+                    mon_evaluation.save_html(temp_path)
+                    
+                    # Log drift report to MLflow
+                    mlflow.log_artifact(temp_path, "drift_reports")
+                    os.unlink(temp_path)
+                    
+                    logger.info(f"✅ Drift report logged ({len(common_cols)} features)")
+                else:
+                    logger.warning("⚠️ No common non-empty columns for drift detection")
         
         logger.info(f"✅ Prediction: {prediction} (proba: {prediction_proba:.4f}, threshold: {model_threshold})")
         
