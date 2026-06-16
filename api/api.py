@@ -447,7 +447,7 @@ async def predict(request: PredictionRequest):
             mlflow.log_metric("prediction_class", prediction)
             
             # Drift detection avec Evidently (seulement si reference_data est disponible)
-            if reference_data is not None:
+            if reference_data is not None :
                 # Filter out columns that are empty in current data
                 non_empty_cols = input_df.columns[input_df.notna().any()].tolist()
                 
