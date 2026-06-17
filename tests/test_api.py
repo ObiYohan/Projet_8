@@ -286,10 +286,11 @@ def test_health_endpoint_should_return_healthy():
     assert response.json()["status"] == "healthy"
 
 @patch('api.api.mlflow.start_run')
+@patch('api.api.mlflow.end_run')
 @patch('api.api.setup_mlflow_auto')
 @patch('api.api.load_model_from_mlflow')
 def test_predict_should_successfully_load_model_when_model_is_none_and_load_succeeds(
-    mock_load_model, mock_setup_mlflow, mock_start_run
+    mock_load_model, mock_setup_mlflow, mock_end_run, mock_start_run
 ):
     """Test that predict successfully loads model when model is None and load succeeds"""
     # Arrange
@@ -303,7 +304,7 @@ def test_predict_should_successfully_load_model_when_model_is_none_and_load_succ
     original_threshold = api_module.model_threshold
     
     try:
-        # Create mock objects AVANT de reset
+        # Create mock objects
         mock_model = MagicMock()
         mock_model.predict_proba.return_value = np.array([[0.3, 0.7]])
         
@@ -313,7 +314,7 @@ def test_predict_should_successfully_load_model_when_model_is_none_and_load_succ
         mock_scaler = MagicMock()
         mock_scaler.transform.return_value = np.array([[0.1, 0.2, 0.3]])
         
-        # Mock load_model_from_mlflow pour qu'il charge les objets
+        # Mock load_model_from_mlflow
         def side_effect_load():
             api_module.model = mock_model
             api_module.imputer = mock_imputer
@@ -324,11 +325,12 @@ def test_predict_should_successfully_load_model_when_model_is_none_and_load_succ
         
         mock_load_model.side_effect = side_effect_load
         
-        # Mock MLflow context
+        # ✅ Mock MLflow context manager pour éviter les appels à la DB
         mock_run = MagicMock()
         mock_start_run.return_value.__enter__.return_value = mock_run
+        mock_start_run.return_value.__exit__.return_value = None
         
-        # Reset model to None pour déclencher le chargement
+        # Reset model to None
         api_module.model = None
         
         # Prepare request
@@ -355,6 +357,10 @@ def test_predict_should_successfully_load_model_when_model_is_none_and_load_succ
         
         # Verify load_model_from_mlflow was called
         mock_load_model.assert_called_once()
+        
+        # ✅ Verify MLflow was NOT actually called (mocked)
+        mock_setup_mlflow.assert_called_once()
+        mock_start_run.assert_called_once()
         
     finally:
         # Restore original state
