@@ -285,12 +285,11 @@ def test_health_endpoint_should_return_healthy():
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
-@patch('api.api.mlflow.start_run')
-@patch('api.api.mlflow.end_run')
 @patch('api.api.setup_mlflow_auto')
 @patch('api.api.load_model_from_mlflow')
+@patch('api.api.mlflow')  # Mock GLOBAL de MLflow pour éviter toute interaction DB
 def test_predict_should_successfully_load_model_when_model_is_none_and_load_succeeds(
-    mock_load_model, mock_setup_mlflow, mock_end_run, mock_start_run
+    mock_mlflow, mock_load_model, mock_setup_mlflow
 ):
     """Test that predict successfully loads model when model is None and load succeeds"""
     # Arrange
@@ -325,10 +324,10 @@ def test_predict_should_successfully_load_model_when_model_is_none_and_load_succ
         
         mock_load_model.side_effect = side_effect_load
         
-        # ✅ Mock MLflow context manager pour éviter les appels à la DB
+        # Mock du context manager mlflow.start_run()
         mock_run = MagicMock()
-        mock_start_run.return_value.__enter__.return_value = mock_run
-        mock_start_run.return_value.__exit__.return_value = None
+        mock_mlflow.start_run.return_value.__enter__.return_value = mock_run
+        mock_mlflow.start_run.return_value.__exit__.return_value = None
         
         # Reset model to None
         api_module.model = None
@@ -358,9 +357,9 @@ def test_predict_should_successfully_load_model_when_model_is_none_and_load_succ
         # Verify load_model_from_mlflow was called
         mock_load_model.assert_called_once()
         
-        # ✅ Verify MLflow was NOT actually called (mocked)
+        # Verify mocked tools were triggered without real MLflow interaction
         mock_setup_mlflow.assert_called_once()
-        mock_start_run.assert_called_once()
+        mock_mlflow.start_run.assert_called_once()
         
     finally:
         # Restore original state
