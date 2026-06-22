@@ -15,7 +15,8 @@ def call_mlflow_start_run(app_train,
                           model_name="classification_model",
                           run_name=None,
                           description="My model run",
-                          model_params=None
+                          model_params=None,
+                          register_model=True
                           ):
     
     """
@@ -98,19 +99,25 @@ def call_mlflow_start_run(app_train,
     # Use pickle for XGBoost and LightGBM (they have their own safe serialization)
     # Use skops for pure scikit-learn models
     if 'XGB' in model_type_name or 'LGBM' in model_type_name or 'LightGBM' in model_type_name:
-        mlflow.sklearn.log_model(
+        model_info = mlflow.sklearn.log_model(
             model, 
             artifact_path=model_name,
-            serialization_format="pickle"
+            serialization_format="pickle",
+            registered_model_name="home_credit_risk_model" if register_model else None  # ✅ Enregistrement automatique
         )
     else:
-        mlflow.sklearn.log_model(
+        model_info = mlflow.sklearn.log_model(
             model, 
             artifact_path=model_name,
             serialization_format="skops",
-            skops_trusted_types=["sklearn.neural_network._stochastic_optimizers.AdamOptimizer"]
+            skops_trusted_types=["sklearn.neural_network._stochastic_optimizers.AdamOptimizer"],
+            registered_model_name="home_credit_risk_model" if register_model else None  # ✅ Enregistrement automatique
         )
     
+    # ✅ Logger l'URI du modèle pour référence
+    if register_model:
+        print(f"✅ Model registered in Model Registry: home_credit_risk_model")
+        print(f"📦 Model URI: {model_info.model_uri}")
     
     # Create and log confusion matrix
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])

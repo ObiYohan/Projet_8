@@ -264,7 +264,8 @@ mlflow_call.call_mlflow_start_run(
     xgb_model,
     predictions_xgb['confusion_matrix'],
     model_name="model",
-    description="xgboost baseline model"
+    description="xgboost baseline model",
+    register_model=True
 )
 
 mlflow.end_run() 
