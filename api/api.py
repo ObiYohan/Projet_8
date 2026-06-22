@@ -375,7 +375,8 @@ def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
         experiment = client.get_experiment_by_name(experiment_name)
         
         if not experiment:
-            raise ValueError(f"Experiment {experiment_name} not found")
+            logger.error(f"❌ Experiment '{experiment_name}' not found")
+            return False, None, None
         
         runs = client.search_runs(
             experiment_ids=[experiment.experiment_id],
@@ -384,14 +385,28 @@ def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
         )
         
         if not runs:
-            raise ValueError("No runs found in experiment")
+            logger.error("❌ No runs found in experiment")
+            return False, None, None
         
         run_id = runs[0].info.run_id
         logger.info(f"📦 Loading model from run: {run_id}")
         
+        # ✅ Vérifier que le tracking URI est bien configuré
+        tracking_uri = mlflow.get_tracking_uri()
+        logger.info(f"📍 MLflow Tracking URI: {tracking_uri}")
+        
+        # ✅ Lister les artifacts disponibles pour debug
+        try:
+            artifacts = client.list_artifacts(run_id)
+            artifact_paths = [a.path for a in artifacts]
+            logger.info(f"📁 Available artifacts: {artifact_paths}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not list artifacts: {e}")
+        
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
                 # Charger les preprocessors
+                logger.info("⏳ Downloading preprocessors...")
                 preprocessors_dir = client.download_artifacts(
                     run_id, 
                     "preprocessors",
@@ -405,24 +420,38 @@ def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
                 logger.info("✅ Preprocessors loaded successfully")
                 
                 # Charger les données de référence
+                logger.info("⏳ Downloading reference data...")
                 data_dir = client.download_artifacts(
                     run_id, 
                     "data",
                     tmpdir
                 )
                 reference_csv_path = Path(data_dir) / "reference_data.csv"
-                
-                # Lire le CSV
                 reference_data = pd.read_csv(reference_csv_path)
                 logger.info(f"✅ Reference data loaded: {reference_data.shape}")
                 
+                # ✅ Télécharger le modèle avec le client (pas avec mlflow.sklearn.load_model)
+                logger.info("⏳ Downloading model artifacts...")
+                model_dir = client.download_artifacts(
+                    run_id,
+                    "model",
+                    tmpdir
+                )
+                logger.info(f"✅ Model artifacts downloaded to: {model_dir}")
+                
+                # ✅ Charger le modèle depuis le chemin local
+                logger.info("⏳ Loading model from local path...")
+                model = mlflow.sklearn.load_model(model_dir)
+                logger.info("✅ Model loaded successfully")
+                
             except Exception as e:
                 logger.error(f"❌ Error loading artifacts: {e}")
-                raise
+                import traceback
+                traceback.print_exc()
+                return False, None, None
         
-        # Charger le modèle
+        # Construire l'URI du modèle pour référence
         model_uri = f"runs:/{run_id}/model"
-        model = mlflow.sklearn.load_model(model_uri)
         
         # Charger le threshold
         threshold_param = runs[0].data.params.get('threshold_value', '0.5')
