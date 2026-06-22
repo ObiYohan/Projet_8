@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from evidently import Report
 from evidently.presets import DataDriftPreset
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 import subprocess
 import sys
 from pathlib import Path
@@ -41,30 +42,94 @@ class JSONFormatter(logging.Formatter):
             "module": record.module,
             "function": record.funcName
         }
+        if record.exc_info:
+            log_data["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_data)
 
 app = FastAPI(title="Home Credit Default Risk API", version="1.0.0")
 
-# Configuration des chemins
-SCRIPT_PATH = PROJECT_ROOT / "src" / "run_xgb_classifier.py"
-LOGS_DIR = PROJECT_ROOT / "logs"
-LOGS_DIR.mkdir(exist_ok=True)
+# Déterminer si on est sur Hugging Face Spaces
+IS_HUGGINGFACE = os.environ.get('SPACE_ID') is not None
+
+# Configuration des chemins selon l'environnement
+if IS_HUGGINGFACE:
+    # Sur HF Spaces, utiliser le répertoire persistant
+    LOGS_DIR = Path("/data/logs")  # Volume persistant sur HF Spaces
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info("📦 Running on Hugging Face Spaces - Using persistent storage")
+else:
+    # En local, utiliser le répertoire du projet
+    LOGS_DIR = PROJECT_ROOT / "logs"
+    LOGS_DIR.mkdir(exist_ok=True)
+    logger.info("💻 Running locally - Using project logs directory")
 
 # Configure JSON logging
 handler = logging.FileHandler(LOGS_DIR / "api_structured.log")
 handler.setFormatter(JSONFormatter())
 logger.addHandler(handler)
 
+# Configuration des chemins
+SCRIPT_PATH = PROJECT_ROOT / "src" / "run_xgb_classifier.py"
 
 # Stockage des statuts d'exécution
 training_status = {}
 
-# ✅ Variables globales avec noms cohérents
+# Variables globales avec noms cohérents
 model = None
 imputer = None
 scaler = None
 feature_names = None
 model_threshold = 0.5  # Valeur par défaut
+
+# Configure multiple log handlers
+## Rotating file handler (by size) - JSON format
+json_handler = RotatingFileHandler(
+    LOGS_DIR / "api_structured.log",
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
+)
+json_handler.setFormatter(JSONFormatter())
+json_handler.setLevel(logging.INFO)
+
+## Daily rotating handler - Human readable format
+daily_handler = TimedRotatingFileHandler(
+    LOGS_DIR / "api_daily.log",
+    when='midnight',
+    interval=1,
+    backupCount=30,  # Keep 30 days
+    encoding='utf-8'
+)
+daily_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+))
+daily_handler.setLevel(logging.INFO)
+
+## Error-only handler
+error_handler = RotatingFileHandler(
+    LOGS_DIR / "api_errors.log",
+    maxBytes=5*1024*1024,  # 5MB
+    backupCount=3,
+    encoding='utf-8'
+)
+error_handler.setFormatter(JSONFormatter())
+error_handler.setLevel(logging.ERROR)
+
+## Console handler for development
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s'
+))
+console_handler.setLevel(logging.INFO)
+
+# Add all handlers to logger
+logger.addHandler(json_handler)
+logger.addHandler(daily_handler)
+logger.addHandler(error_handler)
+logger.addHandler(console_handler)
+
+# Prevent duplicate logs
+logger.propagate = False
 
 class TrainingResponse(BaseModel):
     job_id: str
@@ -493,35 +558,37 @@ async def predict(request: PredictionRequest):
         )
 
 
-@app.post("/model/load")
-async def load_model():
-    """
-    Load the model from MLflow manually
-    """
-    global model, feature_names
+
+
+# @app.post("/model/load")
+# async def load_model():
+#     """
+#     Load the model from MLflow manually
+#     """
+#     global model, feature_names
     
-    if model is not None:
-        return {
-            "status": "already_loaded",
-            "message": "Model is already loaded",
-            "num_features": len(feature_names) if feature_names else 0
-        }
+#     if model is not None:
+#         return {
+#             "status": "already_loaded",
+#             "message": "Model is already loaded",
+#             "num_features": len(feature_names) if feature_names else 0
+#         }
     
-    logger.info("⏳ Loading model from MLflow...")
-    success = load_model_from_mlflow()
+#     logger.info("⏳ Loading model from MLflow...")
+#     success = load_model_from_mlflow()
     
-    if success:
-        return {
-            "status": "success",
-            "message": "Model loaded successfully",
-            "num_features": len(feature_names) if feature_names else 0,
-            "model_type": type(model).__name__
-        }
-    else:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to load model from MLflow"
-        )
+#     if success:
+#         return {
+#             "status": "success",
+#             "message": "Model loaded successfully",
+#             "num_features": len(feature_names) if feature_names else 0,
+#             "model_type": type(model).__name__
+#         }
+#     else:
+#         raise HTTPException(
+#             status_code=500,
+#             detail="Failed to load model from MLflow"
+#         )
 
 if __name__ == "__main__":
     import uvicorn
