@@ -393,7 +393,7 @@ async def health_check():
 
 def load_model_from_mlflow(experiment_name="home_credit_risk_training"):
     """
-    Charge le modèle et les preprocessors depuis MLflow
+    Charge le modèle depuis MLflow Model Registry
     """
     global model, imputer, scaler, feature_names, model_threshold
     
@@ -418,15 +418,44 @@ def load_model_from_mlflow(experiment_name="home_credit_risk_training"):
             raise ValueError("No runs found in experiment")
         
         run_id = runs[0].info.run_id
-        logger.info(f"📦 Loading model from run: {run_id}")
+        logger.info(f"📦 Loading from run: {run_id}")
         
-        # ✅ Charger le modèle DIRECTEMENT avec mlflow.sklearn.load_model
-        model_uri = f"runs:/{run_id}/model"
-        logger.info(f"⏳ Loading model from URI: {model_uri}")
-        model = mlflow.sklearn.load_model(model_uri)
-        logger.info("✅ Model loaded successfully")
+        # ✅ Option 1 : Charger depuis le Model Registry par nom
+        try:
+            model_name = "home_credit_risk_model"  # Nom du modèle enregistré
+            model_version = "latest"  # ou un numéro de version spécifique
+            
+            model_uri = f"models:/{model_name}/{model_version}"
+            logger.info(f"⏳ Loading model from registry: {model_uri}")
+            model = mlflow.sklearn.load_model(model_uri)
+            logger.info("✅ Model loaded from Model Registry")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Model Registry failed: {e}")
+            
+            # ✅ Option 2 : Charger depuis les artifacts du run (si logged_model)
+            logger.info("🔄 Trying to load from run artifacts...")
+            
+            # Lister les artifacts disponibles
+            artifacts = client.list_artifacts(run_id)
+            logger.info(f"📋 Available artifacts: {[a.path for a in artifacts]}")
+            
+            # Chercher le modèle dans les artifacts
+            model_artifact = None
+            for artifact in artifacts:
+                if artifact.path in ["model", "models", "logged_model"]:
+                    model_artifact = artifact.path
+                    break
+            
+            if model_artifact:
+                model_uri = f"runs:/{run_id}/{model_artifact}"
+                logger.info(f"⏳ Loading model from: {model_uri}")
+                model = mlflow.sklearn.load_model(model_uri)
+                logger.info("✅ Model loaded from run artifacts")
+            else:
+                raise ValueError("No model artifact found in run")
         
-        # Charger les preprocessors et data dans un dossier temporaire
+        # Charger les preprocessors
         with tempfile.TemporaryDirectory() as tmpdir:
             logger.info("⏳ Downloading preprocessors...")
             preprocessors_dir = client.download_artifacts(
@@ -446,22 +475,45 @@ def load_model_from_mlflow(experiment_name="home_credit_risk_training"):
                 "data",
                 tmpdir
             )
-            reference_csv_path = Path(data_dir) / "reference_data.csv"
-            reference_data = pd.read_csv(reference_csv_path)
+            reference_data = pd.read_csv(Path(data_dir) / "reference_data.csv")
             logger.info(f"✅ Reference data loaded: {reference_data.shape}")
         
         # Charger le threshold
-        threshold_param = runs[0].data.params.get('threshold_value', '0.5')
-        model_threshold = float(threshold_param)
+        model_threshold = float(runs[0].data.params.get('threshold_value', '0.5'))
         
-        logger.info(f"✅ Model loaded successfully (threshold: {model_threshold})")
+        logger.info(f"✅ All components loaded (threshold: {model_threshold})")
         return True, model_uri, reference_data
         
     except Exception as e:
         logger.error(f"❌ Error loading model: {e}")
         import traceback
         traceback.print_exc()
-        return False, None, None
+        
+        # ✅ Fallback sur fichiers locaux
+        logger.info("🔄 Falling back to local model files...")
+        
+        try:
+            models_dir = Path("models")
+            
+            if not models_dir.exists():
+                raise FileNotFoundError(f"Models directory not found: {models_dir}")
+            
+            model = joblib.load(models_dir / "xgb_model.pkl")
+            imputer = joblib.load(models_dir / "preprocessors" / "imputer.pkl")
+            scaler = joblib.load(models_dir / "preprocessors" / "scaler.pkl")
+            feature_names = joblib.load(models_dir / "preprocessors" / "feature_names.pkl")
+            
+            reference_csv = models_dir / "reference_data.csv"
+            reference_data = pd.read_csv(reference_csv) if reference_csv.exists() else None
+            
+            model_threshold = 0.5
+            
+            logger.info("✅ Model loaded from local files")
+            return True, "local", reference_data
+            
+        except Exception as e2:
+            logger.error(f"❌ Local fallback failed: {e2}")
+            return False, None, None
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
