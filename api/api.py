@@ -560,35 +560,35 @@ async def predict(request: PredictionRequest):
 
 
 
-# @app.post("/model/load")
-# async def load_model():
-#     """
-#     Load the model from MLflow manually
-#     """
-#     global model, feature_names
+@app.post("/model/load")
+async def load_model():
+    """
+    Load the model from MLflow manually
+    """
+    global model, feature_names
     
-#     if model is not None:
-#         return {
-#             "status": "already_loaded",
-#             "message": "Model is already loaded",
-#             "num_features": len(feature_names) if feature_names else 0
-#         }
+    if model is not None:
+        return {
+            "status": "already_loaded",
+            "message": "Model is already loaded",
+            "num_features": len(feature_names) if feature_names else 0
+        }
     
-#     logger.info("⏳ Loading model from MLflow...")
-#     success = load_model_from_mlflow()
+    logger.info("⏳ Loading model from MLflow...")
+    success = load_model_from_mlflow()
     
-#     if success:
-#         return {
-#             "status": "success",
-#             "message": "Model loaded successfully",
-#             "num_features": len(feature_names) if feature_names else 0,
-#             "model_type": type(model).__name__
-#         }
-#     else:
-#         raise HTTPException(
-#             status_code=500,
-#             detail="Failed to load model from MLflow"
-#         )
+    if success:
+        return {
+            "status": "success",
+            "message": "Model loaded successfully",
+            "num_features": len(feature_names) if feature_names else 0,
+            "model_type": type(model).__name__
+        }
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to load model from MLflow"
+        )
 
 if __name__ == "__main__":
     import uvicorn
