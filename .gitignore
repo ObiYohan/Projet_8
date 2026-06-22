@@ -14,6 +14,7 @@ wheels/
 
 # ML flow
 mlartifacts/*
+mlflow_cache/*
 mlflow.db
 *.db
 shap_feature_importance.csv

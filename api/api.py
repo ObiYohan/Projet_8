@@ -391,7 +391,7 @@ async def health_check():
         "logs_dir": str(LOGS_DIR)
     }
 
-def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
+def load_model_from_mlflow(experiment_name="home_credit_risk_training"):
     """
     Charge le modèle et les preprocessors depuis MLflow
     """
@@ -406,8 +406,7 @@ def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
         experiment = client.get_experiment_by_name(experiment_name)
         
         if not experiment:
-            logger.error(f"❌ Experiment '{experiment_name}' not found")
-            return False, None, None
+            raise ValueError(f"Experiment {experiment_name} not found")
         
         runs = client.search_runs(
             experiment_ids=[experiment.experiment_id],
@@ -416,82 +415,40 @@ def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
         )
         
         if not runs:
-            logger.error("❌ No runs found in experiment")
-            return False, None, None
+            raise ValueError("No runs found in experiment")
         
         run_id = runs[0].info.run_id
         logger.info(f"📦 Loading model from run: {run_id}")
         
-        # ✅ Utiliser un cache local persistant sur HF Spaces
-        if IS_HUGGINGFACE:
-            cache_dir = Path("/data/mlflow_cache")
-        else:
-            cache_dir = PROJECT_ROOT / "mlflow_cache"
-        
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        # ✅ Vérifier si les artifacts sont déjà en cache
-        cached_model_dir = cache_dir / run_id / "model"
-        cached_preprocessors_dir = cache_dir / run_id / "preprocessors"
-        cached_data_dir = cache_dir / run_id / "data"
-        
-        if (cached_model_dir.exists() and 
-            cached_preprocessors_dir.exists() and 
-            cached_data_dir.exists()):
-            logger.info("✅ Using cached artifacts")
-            
-            # Charger depuis le cache
-            imputer = joblib.load(cached_preprocessors_dir / "imputer.pkl")
-            scaler = joblib.load(cached_preprocessors_dir / "scaler.pkl")
-            feature_names = joblib.load(cached_preprocessors_dir / "feature_names.pkl")
-            
-            reference_data = pd.read_csv(cached_data_dir / "reference_data.csv")
-            model = mlflow.sklearn.load_model(str(cached_model_dir))
-            
-        else:
-            logger.info("⏳ Downloading artifacts from MLflow...")
-            
-            # Télécharger dans le cache
-            try:
-                # Preprocessors
-                preprocessors_dir = client.download_artifacts(
-                    run_id, 
-                    "preprocessors",
-                    str(cache_dir / run_id)
-                )
-                
-                imputer = joblib.load(Path(preprocessors_dir) / "imputer.pkl")
-                scaler = joblib.load(Path(preprocessors_dir) / "scaler.pkl")
-                feature_names = joblib.load(Path(preprocessors_dir) / "feature_names.pkl")
-                
-                logger.info("✅ Preprocessors loaded")
-                
-                # Reference data
-                data_dir = client.download_artifacts(
-                    run_id, 
-                    "data",
-                    str(cache_dir / run_id)
-                )
-                reference_data = pd.read_csv(Path(data_dir) / "reference_data.csv")
-                logger.info(f"✅ Reference data loaded: {reference_data.shape}")
-                
-                # Model
-                model_dir = client.download_artifacts(
-                    run_id,
-                    "model",
-                    str(cache_dir / run_id)
-                )
-                model = mlflow.sklearn.load_model(model_dir)
-                logger.info("✅ Model loaded")
-                
-            except Exception as artifact_error:
-                logger.error(f"❌ Error loading artifacts: {artifact_error}")
-                import traceback
-                traceback.print_exc()
-                raise
-        
-        # Construire l'URI du modèle
+        # ✅ Charger le modèle DIRECTEMENT avec mlflow.sklearn.load_model
         model_uri = f"runs:/{run_id}/model"
+        logger.info(f"⏳ Loading model from URI: {model_uri}")
+        model = mlflow.sklearn.load_model(model_uri)
+        logger.info("✅ Model loaded successfully")
+        
+        # Charger les preprocessors et data dans un dossier temporaire
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger.info("⏳ Downloading preprocessors...")
+            preprocessors_dir = client.download_artifacts(
+                run_id, 
+                "preprocessors",
+                tmpdir
+            )
+            
+            imputer = joblib.load(Path(preprocessors_dir) / "imputer.pkl")
+            scaler = joblib.load(Path(preprocessors_dir) / "scaler.pkl")
+            feature_names = joblib.load(Path(preprocessors_dir) / "feature_names.pkl")
+            logger.info("✅ Preprocessors loaded")
+            
+            logger.info("⏳ Downloading reference data...")
+            data_dir = client.download_artifacts(
+                run_id, 
+                "data",
+                tmpdir
+            )
+            reference_csv_path = Path(data_dir) / "reference_data.csv"
+            reference_data = pd.read_csv(reference_csv_path)
+            logger.info(f"✅ Reference data loaded: {reference_data.shape}")
         
         # Charger le threshold
         threshold_param = runs[0].data.params.get('threshold_value', '0.5')
