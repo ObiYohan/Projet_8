@@ -430,7 +430,7 @@ def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
                 reference_data = pd.read_csv(reference_csv_path)
                 logger.info(f"✅ Reference data loaded: {reference_data.shape}")
                 
-                # ✅ Télécharger le modèle avec le client (pas avec mlflow.sklearn.load_model)
+                # ✅ Télécharger le modèle avec le client
                 logger.info("⏳ Downloading model artifacts...")
                 model_dir = client.download_artifacts(
                     run_id,
@@ -444,11 +444,12 @@ def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
                 model = mlflow.sklearn.load_model(model_dir)
                 logger.info("✅ Model loaded successfully")
                 
-            except Exception as e:
-                logger.error(f"❌ Error loading artifacts: {e}")
+            except Exception as artifact_error:
+                # ✅ Logger l'erreur AVANT de la propager
+                logger.error(f"❌ Error loading artifacts: {artifact_error}")
                 import traceback
                 traceback.print_exc()
-                return False, None, None
+                raise  # Re-raise pour que le bloc externe la capture
         
         # Construire l'URI du modèle pour référence
         model_uri = f"runs:/{run_id}/model"
