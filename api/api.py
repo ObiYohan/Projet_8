@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from evidently import Report
 from evidently.presets import DataDriftPreset
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 import subprocess
 import sys
 from pathlib import Path
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_data = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),  # ✅ Correction ici
             "level": record.levelname,
             "message": record.getMessage(),
             "module": record.module,
@@ -45,9 +46,39 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_data)
+    
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Gère le cycle de vie de l'application (startup/shutdown)
+    """
+    # Startup
+    logger.info("🚀 API starting up...")
+    
+    def preload_model():
+        global model
+        if model is None:
+            logger.info("⏳ Preloading model at startup...")
+            success, _, _ = load_model_from_mlflow()
+            if success:
+                logger.info("✅ Model preloaded successfully")
+            else:
+                logger.warning("⚠️ Failed to preload model")
+    
+    # Lancer le préchargement dans un thread
+    thread = threading.Thread(target=preload_model, daemon=True)
+    thread.start()
+    
+    yield  # L'application tourne ici
+    
+    # Shutdown (optionnel)
+    logger.info("🛑 API shutting down...")
 
-app = FastAPI(title="Home Credit Default Risk API", version="1.0.0")
-
+app = FastAPI(
+    title="Home Credit Default Risk API", 
+    version="1.0.0",
+    lifespan=lifespan
+)
 # Déterminer si on est sur Hugging Face Spaces
 IS_HUGGINGFACE = os.environ.get('SPACE_ID') is not None
 
@@ -391,67 +422,75 @@ def load_model_from_mlflow(experiment_name = "home_credit_risk_training"):
         run_id = runs[0].info.run_id
         logger.info(f"📦 Loading model from run: {run_id}")
         
-        # ✅ Vérifier que le tracking URI est bien configuré
-        tracking_uri = mlflow.get_tracking_uri()
-        logger.info(f"📍 MLflow Tracking URI: {tracking_uri}")
+        # ✅ Utiliser un cache local persistant sur HF Spaces
+        if IS_HUGGINGFACE:
+            cache_dir = Path("/data/mlflow_cache")
+        else:
+            cache_dir = PROJECT_ROOT / "mlflow_cache"
         
-        # ✅ Lister les artifacts disponibles pour debug
-        try:
-            artifacts = client.list_artifacts(run_id)
-            artifact_paths = [a.path for a in artifacts]
-            logger.info(f"📁 Available artifacts: {artifact_paths}")
-        except Exception as e:
-            logger.warning(f"⚠️ Could not list artifacts: {e}")
+        cache_dir.mkdir(parents=True, exist_ok=True)
         
-        with tempfile.TemporaryDirectory() as tmpdir:
+        # ✅ Vérifier si les artifacts sont déjà en cache
+        cached_model_dir = cache_dir / run_id / "model"
+        cached_preprocessors_dir = cache_dir / run_id / "preprocessors"
+        cached_data_dir = cache_dir / run_id / "data"
+        
+        if (cached_model_dir.exists() and 
+            cached_preprocessors_dir.exists() and 
+            cached_data_dir.exists()):
+            logger.info("✅ Using cached artifacts")
+            
+            # Charger depuis le cache
+            imputer = joblib.load(cached_preprocessors_dir / "imputer.pkl")
+            scaler = joblib.load(cached_preprocessors_dir / "scaler.pkl")
+            feature_names = joblib.load(cached_preprocessors_dir / "feature_names.pkl")
+            
+            reference_data = pd.read_csv(cached_data_dir / "reference_data.csv")
+            model = mlflow.sklearn.load_model(str(cached_model_dir))
+            
+        else:
+            logger.info("⏳ Downloading artifacts from MLflow...")
+            
+            # Télécharger dans le cache
             try:
-                # Charger les preprocessors
-                logger.info("⏳ Downloading preprocessors...")
+                # Preprocessors
                 preprocessors_dir = client.download_artifacts(
                     run_id, 
                     "preprocessors",
-                    tmpdir
+                    str(cache_dir / run_id)
                 )
                 
                 imputer = joblib.load(Path(preprocessors_dir) / "imputer.pkl")
                 scaler = joblib.load(Path(preprocessors_dir) / "scaler.pkl")
                 feature_names = joblib.load(Path(preprocessors_dir) / "feature_names.pkl")
                 
-                logger.info("✅ Preprocessors loaded successfully")
+                logger.info("✅ Preprocessors loaded")
                 
-                # Charger les données de référence
-                logger.info("⏳ Downloading reference data...")
+                # Reference data
                 data_dir = client.download_artifacts(
                     run_id, 
                     "data",
-                    tmpdir
+                    str(cache_dir / run_id)
                 )
-                reference_csv_path = Path(data_dir) / "reference_data.csv"
-                reference_data = pd.read_csv(reference_csv_path)
+                reference_data = pd.read_csv(Path(data_dir) / "reference_data.csv")
                 logger.info(f"✅ Reference data loaded: {reference_data.shape}")
                 
-                # ✅ Télécharger le modèle avec le client
-                logger.info("⏳ Downloading model artifacts...")
+                # Model
                 model_dir = client.download_artifacts(
                     run_id,
                     "model",
-                    tmpdir
+                    str(cache_dir / run_id)
                 )
-                logger.info(f"✅ Model artifacts downloaded to: {model_dir}")
-                
-                # ✅ Charger le modèle depuis le chemin local
-                logger.info("⏳ Loading model from local path...")
                 model = mlflow.sklearn.load_model(model_dir)
-                logger.info("✅ Model loaded successfully")
+                logger.info("✅ Model loaded")
                 
             except Exception as artifact_error:
-                # ✅ Logger l'erreur AVANT de la propager
                 logger.error(f"❌ Error loading artifacts: {artifact_error}")
                 import traceback
                 traceback.print_exc()
-                raise  # Re-raise pour que le bloc externe la capture
+                raise
         
-        # Construire l'URI du modèle pour référence
+        # Construire l'URI du modèle
         model_uri = f"runs:/{run_id}/model"
         
         # Charger le threshold
@@ -619,6 +658,8 @@ async def load_model():
             status_code=500,
             detail="Failed to load model from MLflow"
         )
+    
+
 
 if __name__ == "__main__":
     import uvicorn
