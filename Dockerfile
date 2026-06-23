@@ -21,6 +21,11 @@ COPY gradio_app/ ./gradio_app/
 # Create data directory
 RUN mkdir -p ./data
 
+RUN mkdir -p /data/logs && chmod 777 /data/logs
+
+# Volume pour la persistance des logs
+VOLUME ["/data/logs"]
+
 # Expose ports
 EXPOSE 8000 7860
 
@@ -30,9 +35,3 @@ ENV PYTHONUNBUFFERED=1
 
 # Run both services
 CMD uvicorn api.api:app --host 0.0.0.0 --port 8000 & python gradio_app/app.py
-
-# Créer le répertoire pour les logs persistants
-RUN mkdir -p /data/logs && chmod 777 /data/logs
-
-# Volume pour la persistance des logs
-VOLUME ["/data/logs"]

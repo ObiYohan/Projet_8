@@ -85,7 +85,7 @@ IS_HUGGINGFACE = os.environ.get('SPACE_ID') is not None
 # Configuration des chemins selon l'environnement
 if IS_HUGGINGFACE:
     # Sur HF Spaces, utiliser le répertoire persistant
-    LOGS_DIR = Path("/data/logs")  # Volume persistant sur HF Spaces
+    LOGS_DIR = Path(os.environ.get('LOGS_DIR', '/data/logs'))  # Volume persistant sur HF Spaces
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("📦 Running on Hugging Face Spaces - Using persistent storage")
 else:
