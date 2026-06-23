@@ -160,6 +160,7 @@ def make_predictions(model, data_array, threshold):
 def analyze_drift(reference_data, current_data):
     """
     Analyse le drift entre les données de référence et actuelles
+    Retourne: (drift_report, drift_metrics_dict)
     """
     print("📊 Analyse du drift avec Evidently...")
     
@@ -171,18 +172,61 @@ def analyze_drift(reference_data, current_data):
     
     if len(common_cols) == 0:
         print("⚠️ Aucune colonne commune pour l'analyse de drift")
-        return None
+        return None, None
     
     print(f"📈 Analyse sur {len(common_cols)} features")
     
-    # Créer le rapport de drift
+    # ✅ Créer et exécuter le rapport de drift (v0.7+)
     drift_report = Report(metrics=[DataDriftPreset()])
+    
     drift_report.run(
         reference_data=reference_data[common_cols], 
         current_data=current_data[common_cols]
     )
     
-    return drift_report
+    # ✅ Pour v0.7+, utiliser json() au lieu de as_dict()
+    drift_metrics = {}
+    
+    try:
+        results = drift_report.json()
+        results_dict = json.loads(results)
+        
+        if 'metrics' in results_dict:
+            for metric in results_dict['metrics']:
+                if 'result' in metric:
+                    result = metric['result']
+                    if 'dataset_drift' in result:
+                        dataset_drift = result['dataset_drift']
+                        drift_share = result.get('drift_share', 0)
+                        n_drifted = result.get('number_of_drifted_columns', 0)
+                        n_total = result.get('number_of_columns', len(common_cols))
+                        
+                        drift_metrics = {
+                            'dataset_drift': dataset_drift,
+                            'drift_share': drift_share,
+                            'n_drifted_features': n_drifted,
+                            'n_total_features': n_total
+                        }
+                        
+                        print(f"\n📊 Résultats du drift:")
+                        print(f"  - Dataset drift détecté: {'⚠️ OUI' if dataset_drift else '✅ NON'}")
+                        print(f"  - Features en drift: {n_drifted}/{n_total} ({drift_share*100:.1f}%)")
+                        
+                        if 'drift_by_columns' in result:
+                            drifted_features = [
+                                col for col, info in result['drift_by_columns'].items() 
+                                if isinstance(info, dict) and info.get('drift_detected', False)
+                            ]
+                            if drifted_features:
+                                print(f"\n  📋 Top features en drift:")
+                                for feat in sorted(drifted_features)[:10]:
+                                    print(f"    - {feat}")
+                                if len(drifted_features) > 10:
+                                    print(f"    ... et {len(drifted_features) - 10} autres")
+    except Exception as e:
+        print(f"⚠️ Impossible d'extraire les métriques détaillées: {e}")
+    
+    return drift_report, drift_metrics
 
 
 def main(test_data_path):
@@ -251,7 +295,7 @@ def main(test_data_path):
         mlflow.log_artifact(results_path, "predictions")
         os.remove(results_path)
 
-        if reference_data is not None :
+        if reference_data is not None:
             # Filter out columns that are empty in current data
             non_empty_cols = test_processed.columns[test_processed.notna().any()].tolist()
             
@@ -280,6 +324,19 @@ def main(test_data_path):
     print("=" * 60)
     
     return results_df
+
+
+def load_raw_reference_data():
+    """
+    Charge les données de référence BRUTES (avant preprocessing)
+    """
+    data_path = PROJECT_ROOT / "data" / "init" / "application_train.csv"
+    df = pd.read_csv(data_path)
+    
+    # Prendre un échantillon représentatif (même taille que les scénarios)
+    df_sample = df.sample(n=1000, random_state=42)
+    
+    return df_sample
 
 
 if __name__ == "__main__":

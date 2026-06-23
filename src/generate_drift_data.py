@@ -43,19 +43,20 @@ def df_to_api_format(df):
         records.append({"features": features})
     return records
 
-def create_scenario_1_income_inflation(df, sample_size=100):
-    """Scénario 1: Inflation des revenus"""
-    df_drift = df.sample(n=sample_size, random_state=42).copy()
-    df_drift['AMT_INCOME_TOTAL'] = df_drift['AMT_INCOME_TOTAL'] * 1.5
-    df_drift['AMT_CREDIT'] = df_drift['AMT_CREDIT'] * 1.2
-    return add_engineered_features(df_drift)
+# def create_scenario_1_income_inflation(df, sample_size=100):
+#     """Scénario 1: Inflation FORTE des revenus"""
+#     df_drift = df.sample(n=sample_size, random_state=42).copy()
+#     df_drift['AMT_INCOME_TOTAL'] = df_drift['AMT_INCOME_TOTAL'] * 3.0  
+#     df_drift['AMT_CREDIT'] = df_drift['AMT_CREDIT'] * 2.5
+#     df_drift['AMT_ANNUITY'] = df_drift['AMT_ANNUITY'] * 2.0
+#     return df_drift
 
-def create_scenario_2_demographic_shift(df, sample_size=100):
-    """Scénario 2: Changement démographique"""
-    df_drift = df.sample(n=sample_size, random_state=43).copy()
-    df_drift['DAYS_BIRTH'] = df_drift['DAYS_BIRTH'] + 3650
-    df_drift['CNT_CHILDREN'] = np.clip(df_drift['CNT_CHILDREN'] + 1, 0, 10)
-    return add_engineered_features(df_drift)
+# def create_scenario_2_demographic_shift(df, sample_size=100):
+#     """Scénario 2: Changement démographique"""
+#     df_drift = df.sample(n=sample_size, random_state=43).copy()
+#     df_drift['DAYS_BIRTH'] = df_drift['DAYS_BIRTH'] + 3650
+#     df_drift['CNT_CHILDREN'] = np.clip(df_drift['CNT_CHILDREN'] + 1, 0, 10)
+#     return add_engineered_features(df_drift)
 
 def create_scenario_3_economic_crisis(df, sample_size=100):
     """Scénario 3: Crise économique"""
@@ -64,17 +65,17 @@ def create_scenario_3_economic_crisis(df, sample_size=100):
     df_drift['DAYS_EMPLOYED'] = df_drift['DAYS_EMPLOYED'] * 0.5
     return add_engineered_features(df_drift)
 
-def create_scenario_4_data_quality_issue(df, sample_size=100):
-    """Scénario 4: Problème de qualité des données"""
-    df_drift = df.sample(n=sample_size, random_state=45).copy()
+# def create_scenario_4_data_quality_issue(df, sample_size=100):
+#     """Scénario 4: Problème de qualité des données"""
+#     df_drift = df.sample(n=sample_size, random_state=45).copy()
     
-    # Introduire des valeurs manquantes
-    for col in ['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']:
-        if col in df_drift.columns:
-            mask = np.random.random(len(df_drift)) < 0.3
-            df_drift.loc[mask, col] = np.nan
+#     # Introduire des valeurs manquantes
+#     for col in ['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']:
+#         if col in df_drift.columns:
+#             mask = np.random.random(len(df_drift)) < 0.3
+#             df_drift.loc[mask, col] = np.nan
     
-    return add_engineered_features(df_drift)
+#     return add_engineered_features(df_drift)
 
 def save_scenarios():
     """Génère et sauvegarde tous les scénarios"""
@@ -85,10 +86,10 @@ def save_scenarios():
     output_dir.mkdir(parents=True, exist_ok=True)
     
     scenarios = {
-        "scenario_1_income_inflation": create_scenario_1_income_inflation(df),
-        "scenario_2_demographic_shift": create_scenario_2_demographic_shift(df),
-        "scenario_3_economic_crisis": create_scenario_3_economic_crisis(df),
-        "scenario_4_data_quality": create_scenario_4_data_quality_issue(df)
+        # "scenario_1_income_inflation": create_scenario_1_income_inflation(df)
+        # "scenario_2_demographic_shift": create_scenario_2_demographic_shift(df),
+        "scenario_3_economic_crisis": create_scenario_3_economic_crisis(df)
+        # "scenario_4_data_quality": create_scenario_4_data_quality_issue(df)
     }
     
     for name, df_scenario in scenarios.items():
