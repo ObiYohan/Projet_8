@@ -81,25 +81,18 @@ def sync_log_to_hf(log_file_path: Path):
     try:
         logger.info(f"📤 Syncing log to HF: {log_file_path.name}")
         
-        # ✅ Lire le contenu du fichier
-        with open(log_file_path, 'rb') as f:
-            content = f.read()
-        
-        # ✅ Upload avec le contenu en bytes
         hf_api.upload_file(
-            path_or_fileobj=content,
-            path_in_repo=f"{LOGS_BUCKET_PATH}/{log_file_path.name}",
+            path_or_fileobj=str(log_file_path),  # ✅ Chemin local du fichier
+            path_in_repo=f"logs/{log_file_path.name}",  # ✅ Chemin dans le bucket
             repo_id=HF_BUCKET,
             repo_type="dataset",
-            token=HF_TOKEN,
-            commit_message=f"Update {log_file_path.name}"  # ✅ Ajouter un message
+            token=HF_TOKEN
         )
         
         logger.info(f"✅ Log synced: {log_file_path.name}")
         
     except Exception as e:
         logger.error(f"❌ HF sync failed for {log_file_path.name}: {e}")
-        # ✅ Log plus de détails
         import traceback
         logger.error(traceback.format_exc())
 
