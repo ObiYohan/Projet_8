@@ -7,6 +7,8 @@ from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from huggingface_hub import HfApi
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from huggingface_hub import HfApi
+from huggingface_hub import upload_file_to_bucket
 import subprocess
 import sys
 from pathlib import Path
@@ -74,25 +76,31 @@ else:
     logger.info("💻 Running locally - Using project logs directory")
 
 def sync_log_to_hf(log_file_path: Path):
-    """Synchronise un fichier de log vers le bucket HF"""
-    if not IS_HUGGINGFACE or not HF_TOKEN or not hf_api:
+    """Synchronise un fichier de log vers un HF Storage Bucket"""
+    if not IS_HUGGINGFACE or not HF_TOKEN:
         return
     
-    try:
-        logger.info(f"📤 Syncing log to HF: {log_file_path.name}")
+    # Éviter d'envoyer des fichiers vides
+    if not log_file_path.exists() or log_file_path.stat().st_size == 0:
+        return
         
-        hf_api.upload_file(
-            path_or_fileobj=str(log_file_path),  # ✅ Chemin local du fichier
-            path_in_repo=f"logs/{log_file_path.name}",  # ✅ Chemin dans le bucket
-            repo_id=HF_BUCKET,
-            repo_type="dataset",
+    try:
+        logger.info(f"📤 Syncing log to HF Bucket: {log_file_path.name}")
+        
+        # Le nom de ton bucket (sans le préfixe hf://buckets/)
+        BUCKET_ID = "0biyohan/Projet_8-storage"
+        
+        # Utilisation de la fonction dédiée aux Buckets
+        upload_file_to_bucket(
+            bucket_id=BUCKET_ID,
+            path_or_fileobj=str(log_file_path),      # Ton fichier log local
+            path_in_bucket=f"logs/{log_file_path.name}", # Destination dans le bucket
             token=HF_TOKEN
         )
-        
-        logger.info(f"✅ Log synced: {log_file_path.name}")
+        logger.info(f"✅ Log synced to Bucket: {log_file_path.name}")
         
     except Exception as e:
-        logger.error(f"❌ HF sync failed for {log_file_path.name}: {e}")
+        logger.error(f"❌ HF Bucket sync failed for {log_file_path.name}: {e}")
         import traceback
         logger.error(traceback.format_exc())
 
