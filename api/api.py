@@ -7,8 +7,7 @@ from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from huggingface_hub import HfApi
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from huggingface_hub import HfApi
-from huggingface_hub import upload_file_to_bucket
+from huggingface_hub import batch_bucket_files
 import subprocess
 import sys
 from pathlib import Path
@@ -80,29 +79,26 @@ def sync_log_to_hf(log_file_path: Path):
     if not IS_HUGGINGFACE or not HF_TOKEN:
         return
     
-    # Éviter d'envoyer des fichiers vides
     if not log_file_path.exists() or log_file_path.stat().st_size == 0:
         return
         
     try:
         logger.info(f"📤 Syncing log to HF Bucket: {log_file_path.name}")
         
-        # Le nom de ton bucket (sans le préfixe hf://buckets/)
         BUCKET_ID = "0biyohan/Projet_8-storage"
         
-        # Utilisation de la fonction dédiée aux Buckets
-        upload_file_to_bucket(
+        # Envoi du fichier de log sous forme de liste de tâches (add)
+        batch_bucket_files(
             bucket_id=BUCKET_ID,
-            path_or_fileobj=str(log_file_path),      # Ton fichier log local
-            path_in_bucket=f"logs/{log_file_path.name}", # Destination dans le bucket
+            add=[
+                (str(log_file_path), f"logs/{log_file_path.name}")
+            ],
             token=HF_TOKEN
         )
         logger.info(f"✅ Log synced to Bucket: {log_file_path.name}")
         
     except Exception as e:
         logger.error(f"❌ HF Bucket sync failed for {log_file_path.name}: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
 
 # Configure log handlers
 json_handler = RotatingFileHandler(
