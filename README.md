@@ -2,7 +2,7 @@
 
 ## 🚀 Lancement de l'Application
 
-### Option 1: Avec Docker (Recommandé)
+### Option 1: Avec Docker
 ```bash
 # Construire l'image Docker
 docker build -t credit-risk-app .
@@ -23,6 +23,12 @@ uvicorn api.api:app --host 0.0.0.0 --port 8000
 # Lancer l'interface Gradio (dans un autre terminal)
 python gradio_app/app.py
 ```
+
+### Version hébergé
+
+- Application : https://huggingface.co/spaces/0biyohan/Projet_8
+- Stockage : https://huggingface.co/buckets/0biyohan/Projet_8-storage
+- MlFlow : https://dagshub.com/ObiYohan/my-ml-mlflow.mlflow/#/experiments
 
 ## 🌐 Accès aux Interfaces
 
