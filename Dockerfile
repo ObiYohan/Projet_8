@@ -23,8 +23,6 @@ RUN mkdir -p ./data
 
 RUN mkdir -p /data/logs && chmod 777 /data/logs
 
-# Volume pour la persistance des logs
-VOLUME ["/data/logs"]
 
 # Expose ports
 EXPOSE 8000 7860

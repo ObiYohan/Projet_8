@@ -4,12 +4,12 @@ from typing import Optional, Dict, Any
 from evidently import Report
 from evidently.presets import DataDriftPreset
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from huggingface_hub import HfApi
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import subprocess
 import sys
 from pathlib import Path
-from datetime import datetime
 import logging
 import threading
 import pandas as pd
@@ -19,8 +19,9 @@ import mlflow
 import joblib
 import tempfile
 import json
+import time
 
-# Ajouter src/ au PYTHONPATH dès le début
+# Ajouter src/ au PYTHONPATH
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 SRC_DIR = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_data = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),  # ✅ Correction ici
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),
             "module": record.module,
@@ -46,89 +47,61 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_data)
-    
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Gère le cycle de vie de l'application (startup/shutdown)
-    """
-    # Startup
-    logger.info("🚀 API starting up...")
-    
-    def preload_model():
-        global model
-        if model is None:
-            logger.info("⏳ Preloading model at startup...")
-            success, _, _ = load_model_from_mlflow()
-            if success:
-                logger.info("✅ Model preloaded successfully")
-            else:
-                logger.warning("⚠️ Failed to preload model")
-    
-    # Lancer le préchargement dans un thread
-    thread = threading.Thread(target=preload_model, daemon=True)
-    thread.start()
-    
-    yield  # L'application tourne ici
-    
-    # Shutdown (optionnel)
-    logger.info("🛑 API shutting down...")
 
-app = FastAPI(
-    title="Home Credit Default Risk API", 
-    version="1.0.0",
-    lifespan=lifespan
-)
 # Déterminer si on est sur Hugging Face Spaces
 IS_HUGGINGFACE = os.environ.get('SPACE_ID') is not None
 
 # Configuration des chemins selon l'environnement
 if IS_HUGGINGFACE:
-    # Sur HF Spaces, utiliser le répertoire persistant
-    LOGS_DIR = Path(os.environ.get('LOGS_DIR', '/data/logs'))  # Volume persistant sur HF Spaces
+    HF_BUCKET = "0biyohan/Projet_8-storage"
+    LOGS_BUCKET_PATH = "logs"
+    LOGS_DIR = Path("/tmp/logs")
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    logger.info("📦 Running on Hugging Face Spaces - Using persistent storage")
+    
+    logger.info(f"📦 Running on Hugging Face Spaces - Using bucket: {HF_BUCKET}/{LOGS_BUCKET_PATH}")
+    
+    hf_api = HfApi()
+    HF_TOKEN = os.environ.get('HF_TOKEN')
+    
+    if not HF_TOKEN:
+        logger.warning("⚠️ HF_TOKEN not found - logs won't be persisted")
 else:
-    # En local, utiliser le répertoire du projet
     LOGS_DIR = PROJECT_ROOT / "logs"
     LOGS_DIR.mkdir(exist_ok=True)
+    HF_BUCKET = None
+    hf_api = None
+    HF_TOKEN = None
     logger.info("💻 Running locally - Using project logs directory")
 
-# Configure JSON logging
-handler = logging.FileHandler(LOGS_DIR / "api_structured.log")
-handler.setFormatter(JSONFormatter())
-logger.addHandler(handler)
+def sync_log_to_hf(log_file_path: Path):
+    """Synchronise un fichier de log vers le bucket HF"""
+    if IS_HUGGINGFACE and HF_TOKEN and hf_api:
+        try:
+            hf_api.upload_file(
+                path_or_fileobj=str(log_file_path),
+                path_in_repo=f"{LOGS_BUCKET_PATH}/{log_file_path.name}",
+                repo_id=HF_BUCKET,
+                repo_type="dataset",
+                token=HF_TOKEN
+            )
+        except Exception as e:
+            logger.error(f"❌ HF sync failed: {e}")
 
-# Configuration des chemins
-SCRIPT_PATH = PROJECT_ROOT / "src" / "run_xgb_classifier.py"
-
-# Stockage des statuts d'exécution
-training_status = {}
-
-# Variables globales avec noms cohérents
-model = None
-imputer = None
-scaler = None
-feature_names = None
-model_threshold = 0.5  # Valeur par défaut
-
-# Configure multiple log handlers
-## Rotating file handler (by size) - JSON format
+# Configure log handlers
 json_handler = RotatingFileHandler(
     LOGS_DIR / "api_structured.log",
-    maxBytes=10*1024*1024,  # 10MB
+    maxBytes=10*1024*1024,
     backupCount=5,
     encoding='utf-8'
 )
 json_handler.setFormatter(JSONFormatter())
 json_handler.setLevel(logging.INFO)
 
-## Daily rotating handler - Human readable format
 daily_handler = TimedRotatingFileHandler(
     LOGS_DIR / "api_daily.log",
     when='midnight',
     interval=1,
-    backupCount=30,  # Keep 30 days
+    backupCount=30,
     encoding='utf-8'
 )
 daily_handler.setFormatter(logging.Formatter(
@@ -136,17 +109,15 @@ daily_handler.setFormatter(logging.Formatter(
 ))
 daily_handler.setLevel(logging.INFO)
 
-## Error-only handler
 error_handler = RotatingFileHandler(
     LOGS_DIR / "api_errors.log",
-    maxBytes=5*1024*1024,  # 5MB
+    maxBytes=5*1024*1024,
     backupCount=3,
     encoding='utf-8'
 )
 error_handler.setFormatter(JSONFormatter())
 error_handler.setLevel(logging.ERROR)
 
-## Console handler for development
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(logging.Formatter(
     '%(asctime)s - %(levelname)s - %(message)s'
@@ -154,14 +125,36 @@ console_handler.setFormatter(logging.Formatter(
 console_handler.setLevel(logging.INFO)
 
 # Add all handlers to logger
-logger.addHandler(json_handler)
-logger.addHandler(daily_handler)
-logger.addHandler(error_handler)
-logger.addHandler(console_handler)
+for handler in [json_handler, daily_handler, error_handler, console_handler]:
+    logger.addHandler(handler)
 
-# Prevent duplicate logs
 logger.propagate = False
 
+# Sync logs to HF every 5 minutes (only on HF Spaces)
+if IS_HUGGINGFACE and HF_TOKEN:
+    def sync_all_logs():
+        while True:
+            time.sleep(300)  # 5 minutes
+            for log_file in LOGS_DIR.glob("*.log"):
+                sync_log_to_hf(log_file)
+    
+    threading.Thread(target=sync_all_logs, daemon=True).start()
+    logger.info("🔄 Log sync to HF started (every 5 minutes)")
+
+# Configuration des chemins
+SCRIPT_PATH = PROJECT_ROOT / "src" / "run_xgb_classifier.py"
+
+# Stockage des statuts d'exécution
+training_status = {}
+
+# Variables globales
+model = None
+imputer = None
+scaler = None
+feature_names = None
+model_threshold = 0.5
+
+# Pydantic models
 class TrainingResponse(BaseModel):
     job_id: str
     status: str
@@ -185,11 +178,32 @@ class PredictionResponse(BaseModel):
     probability: float
     threshold: float
 
-# Global variables for model and preprocessors
-loaded_model = None
-imputer = None
-scaler = None
-feature_names = None
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Gère le cycle de vie de l'application"""
+    logger.info("🚀 API starting up...")
+    
+    def preload_model():
+        global model
+        if model is None:
+            logger.info("⏳ Preloading model at startup...")
+            success, _, _ = load_model_from_mlflow()
+            if success:
+                logger.info("✅ Model preloaded successfully")
+            else:
+                logger.warning("⚠️ Failed to preload model")
+    
+    threading.Thread(target=preload_model, daemon=True).start()
+    
+    yield
+    
+    logger.info("🛑 API shutting down...")
+
+app = FastAPI(
+    title="Home Credit Default Risk API", 
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 
 def run_training_script(job_id: str):
