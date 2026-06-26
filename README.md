@@ -1,5 +1,44 @@
 # Credit Risk API - Guide de Démarrage
 
+## Contexte Métier
+
+### 🎯 Objectif Principal
+
+Prédire le risque de défaut de paiement des clients pour une institution de crédit, afin d'optimiser les décisions d'octroi de prêts.
+
+### 📊 Problématique Métier
+
+#### Déséquilibre des Classes
+- 92% de clients solvables (pas de défaut)
+- 8% de clients en défaut
+- Ce déséquilibre rend l'accuracy non pertinente comme métrique
+
+#### Asymétrie Financière
+Le coût des erreurs n'est pas symétrique :
+- Faux Négatif (FN) : Accorder un prêt à un client qui fera défaut → Perte de capital (coût x10)
+- Faux Positif (FP) : Refuser un prêt à un bon client → Manque à gagner (coût x1)
+
+#### 🎯 Classes du Modèle
+Le modèle prédit une classification binaire :
+##### Classe 0 : Pas de Défaut ✅
+- Client solvable qui remboursera son prêt
+- Décision métier : Accorder le crédit
+- Représente ~92% des cas dans les données d'entraînement
+##### Classe 1 : Défaut de Paiement ⚠️
+- Client à risque qui risque de ne pas rembourser
+- Décision métier : Refuser le crédit (ou demander des garanties supplémentaires)
+- Représente ~8% des cas dans les données d'entraînement
+
+
+#### 💡 Solution Adoptée
+##### Métrique Personnalisée : Business Cost
+- Optimisation d'un coût métier qui pénalise 10x plus les FN que les FP
+- Permet de définir un seuil de décision optimal aligné sur les objectifs financiers
+- Minimise l'impact financier total plutôt que de maximiser l'accuracy
+##### Architecture Technique
+- Modèle XGBoost avec scale_pos_weight pour gérer le déséquilibre
+- Monitoring du drift avec Evidently pour détecter les changements de distribution
+
 ## 🚀 Lancement de l'Application
 
 ### Option 1: Avec Docker
