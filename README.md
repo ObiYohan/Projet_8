@@ -39,6 +39,16 @@ Le modèle prédit une classification binaire :
 - Modèle XGBoost avec scale_pos_weight pour gérer le déséquilibre
 - Monitoring du drift avec Evidently pour détecter les changements de distribution
 
+## 🎯 Objetif du projet
+
+Préparer la mise en production du modèle développé précédemment :
+- Architecture Git
+- Api fonctionnel et accessible via une interface
+- Tests unitaires automatisés
+- Conteneurisation du code avec Docker
+- Analyse du Data Drift
+- Pipeline CI/CD
+
 ## 🚀 Lancement de l'Application
 
 ### Option 1: Avec Docker
