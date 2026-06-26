@@ -49,6 +49,39 @@ Préparer la mise en production du modèle développé précédemment :
 - Analyse du Data Drift
 - Pipeline CI/CD
 
+## Architecture MLOps du Projet
+
+### 🏗️ Vue d'Ensemble
+Le projet implémente une architecture MLOps complète pour la mise en production d'un modèle de scoring crédit.
+### 📦 Composants Principaux
+#### 1. Gestion des Modèles - MLflow
+- Tracking : Suivi des expérimentations et métriques
+- Model Registry : Versioning des modèles et preprocessors
+- Artifacts : Stockage des modèles, scalers, imputers, et données de référence
+
+#### 2. API de Prédiction - FastAPI
+- Endpoint /predict pour les prédictions en temps réel
+- Chargement automatique du modèle depuis MLflow
+- Preprocessing intégré (imputation + scaling)
+- Gestion des erreurs et validation des données
+#### 3. Interface Utilisateur - Gradio
+- Interface web accessible pour tester les prédictions
+- Intégration avec l'API FastAPI
+- Visualisation des résultats de prédiction
+#### 4. Monitoring - Evidently
+- Data Drift Detection : Détection automatique des changements de distribution
+- Rapports HTML : Visualisation détaillée du drift
+- Logging MLflow : Tracking des métriques de drift dans MLflow
+- Comparaison : Données actuelles vs données de référence
+#### 5. Conteneurisation - Docker
+- Image unique contenant API + Interface
+- Ports exposés : 8000 (API) et 7860 (Gradio)
+- Configuration multi-environnement (local/cloud)
+#### 6. CI/CD
+- Tests automatisés avec pytest
+- Couverture de code
+- Déploiement automatique sur Hugging Face Spaces
+
 ## 🚀 Lancement de l'Application
 
 ### Option 1: Avec Docker
